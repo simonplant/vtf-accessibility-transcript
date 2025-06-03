@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "VTF Audio Transcription",
+  "version": "1.0.0",
+  "description": "Captures and transcribes audio from the VTF trading floor",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "downloads"
+  ],
+  
+  "host_permissions": [
+    "https://vtf.t3live.com/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["https://vtf.t3live.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["https://vtf.t3live.com/*"]
+    }
+  ],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
+}

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VTF Transcriber Options</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1976d2;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .option-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #1565c0;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            display: block;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            color: #1565c0;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>VTF Audio Transcriber Settings</h1>
+        
+        <div class="info">
+            <strong>How it works:</strong> This extension captures audio from the VTF trading floor and uses your browser's built-in speech recognition to create transcripts. No external API keys required!
+        </div>
+        
+        <div class="warning">
+            <strong>Note:</strong> For best results, make sure your system audio is routed properly. The extension will show audio levels when sound is detected.
+        </div>
+        
+        <div class="section">
+            <h2>General Settings</h2>
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="auto-start"> 
+                    Automatically start transcription when VTF page loads
+                </label>
+            </div>
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="save-transcripts" checked> 
+                    Save transcripts locally
+                </label>
+            </div>
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="show-interim"> 
+                    Show interim transcription results (live preview)
+                </label>
+            </div>
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="timestamp-format"> 
+                    Use 24-hour time format
+                </label>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Audio Settings</h2>
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="show-levels" checked> 
+                    Show audio level indicator
+                </label>
+            </div>
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="debug-mode"> 
+                    Enable debug mode (show technical logs)
+                </label>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Export Options</h2>
+            <button id="exportBtn">Export All Transcripts</button>
+            <button id="clearBtn" style="background: #f44336; margin-left: 10px;">Clear All Data</button>
+        </div>
+        
+        <button id="saveBtn">Save Settings</button>
+        <div id="status" class="status"></div>
+    </div>
+    
+    <script src="options.js"></script>
+</body>
+</html>
