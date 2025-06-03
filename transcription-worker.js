@@ -1,5 +1,17 @@
-// transcription-worker.js - Runs Vosk in a Web Worker
-importScripts('https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/dist/vosk.js');
+// transcription-worker.js - LOCAL Vosk transcription
+console.log('[Worker] Transcription worker starting...');
+console.log('[Worker] Worker location:', self.location.href);
+
+// Import LOCAL Vosk library with full URL
+try {
+    const voskUrl = new URL('vosk.js', self.location.href).href;
+    console.log('[Worker] Loading Vosk from:', voskUrl);
+    importScripts(voskUrl);
+    console.log('[Worker] Vosk library loaded');
+} catch (e) {
+    console.error('[Worker] Failed to load vosk.js:', e.message);
+    console.error('[Worker] Current directory:', self.location.href);
+}
 
 let recognizer = null;
 let model = null;
@@ -11,10 +23,12 @@ async function initializeVosk() {
         console.log('[Worker] Loading Vosk model...');
         postMessage({ type: 'status', message: 'Loading model (40MB)...' });
         
-        // Load the model - this downloads once and caches
-        model = await Vosk.createModel(
-            'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip'
-        );
+        // Load the model from LOCAL file
+        const modelUrl = new URL('vosk-model-small-en-us-0.15.zip', self.location.href).href;
+        console.log('[Worker] Model URL:', modelUrl);
+        
+        model = await Vosk.createModel(modelUrl);
+        console.log('[Worker] Model loaded successfully!');
         
         // Create recognizer with 16kHz sample rate
         recognizer = new model.KaldiRecognizer(16000);
@@ -84,14 +98,12 @@ self.addEventListener('message', async (event) => {
             
         case 'reset':
             if (recognizer) {
-                // Reset recognizer for new session
                 recognizer = new model.KaldiRecognizer(16000);
             }
             break;
             
         case 'final':
             if (recognizer) {
-                // Get final result and reset
                 const finalJson = JSON.parse(recognizer.finalResult());
                 if (finalJson.text && finalJson.text.trim() !== '') {
                     postMessage({

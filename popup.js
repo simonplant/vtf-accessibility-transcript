@@ -16,21 +16,22 @@ const errorMessage = document.getElementById('errorMessage');
 // State
 let isTranscribing = false;
 let transcriptLines = [];
-let currentTab = null;
+let vtfTab = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    // Get current tab
+    // Get current tab - simple!
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    currentTab = tabs[0];
+    const currentTab = tabs[0];
     
     // Check if we're on VTF
-    console.log('Current URL:', currentTab.url);
-    if (!currentTab.url.includes('vtf.t3live.com')) {
-        showError('Make sure you are on a VTF page');
+    if (!currentTab.url || !currentTab.url.includes('vtf.t3live.com')) {
+        showError('Please navigate to VTF (vtf.t3live.com)');
         toggleBtn.disabled = true;
         return;
     }
+    
+    vtfTab = currentTab;
     
     // Get current state
     chrome.runtime.sendMessage({ type: 'get_state' }, (state) => {
@@ -45,9 +46,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Button handlers
 toggleBtn.addEventListener('click', () => {
+    if (!vtfTab) {
+        showError('No VTF tab found');
+        return;
+    }
+    
     chrome.runtime.sendMessage({ 
         type: 'toggle_transcription',
-        tab: currentTab 
+        tab: vtfTab 
     });
     
     isTranscribing = !isTranscribing;
@@ -56,7 +62,7 @@ toggleBtn.addEventListener('click', () => {
 
 exportBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ type: 'export_transcript' }, (response) => {
-        if (response.success) {
+        if (response && response.success) {
             showMessage(`Transcript exported: ${response.filename}`);
         }
     });
@@ -79,7 +85,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     switch (request.type) {
         case 'update_popup':
             if (request.data.streamReady) {
-                audioSources.textContent = `${request.data.trackCount} sources connected`;
+                audioSources.textContent = `${request.data.trackCount} audio source${request.data.trackCount > 1 ? 's' : ''} connected`;
                 audioSources.classList.add('success');
             }
             break;
@@ -189,12 +195,10 @@ function hideInterimTranscript() {
 }
 
 function showError(error) {
-    errorMessage.textContent = `Error: ${error}`;
-    errorMessage.classList.remove('hidden');
+    errorMessage.textContent = error.startsWith('Error:') ? error : `Error: ${error}`;
+    errorMessage.classList.remove('hidden', 'success-message');
     
-    setTimeout(() => {
-        errorMessage.classList.add('hidden');
-    }, 5000);
+    // Don't auto-hide error messages
 }
 
 function showMessage(message) {
@@ -210,17 +214,28 @@ function showMessage(message) {
 
 // Check audio status
 async function checkAudioStatus() {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    
+    if (!tab || !tab.url || !tab.url.includes('vtf.t3live.com')) {
+        return;
+    }
+    
     try {
-        // Send message to content script to check audio
-        chrome.tabs.sendMessage(currentTab.id, { type: 'check_audio' }, (response) => {
+        chrome.tabs.sendMessage(tab.id, { type: 'check_audio' }, (response) => {
             if (chrome.runtime.lastError) {
-                audioSources.textContent = 'Not connected';
-                audioSources.classList.add('danger');
-                audioSources.classList.remove('success');
+                audioSources.textContent = 'Loading...';
+                setTimeout(checkAudioStatus, 2000);
+            } else if (response && response.audioReady) {
+                audioSources.textContent = 'Audio ready';
+                audioSources.classList.add('success');
+            } else {
+                audioSources.textContent = 'Waiting for audio...';
+                setTimeout(checkAudioStatus, 2000);
             }
         });
     } catch (e) {
-        console.error('Error checking audio status:', e);
+        console.error('Error checking audio:', e);
     }
 }
 
@@ -239,5 +254,5 @@ document.getElementById('helpLink').addEventListener('click', (e) => {
 
 document.getElementById('aboutLink').addEventListener('click', (e) => {
     e.preventDefault();
-    alert('VTF Audio Transcription Extension v1.0\n\nCaptures and transcribes audio from the VTF trading floor.');
+    alert('VTF Audio Transcription Extension v1.0\n\nCaptures and transcribes audio from the VTF trading floor using local Vosk speech recognition.');
 });

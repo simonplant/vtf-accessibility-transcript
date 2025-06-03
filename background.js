@@ -7,11 +7,40 @@ let transcriptionState = {
     transcripts: [],
     settings: {
         saveTranscripts: true,
-        timestampFormat: '12h', // 12-hour format (not 24h)
+        timestampFormat: '12h',
         speakerLabels: true,
-        autoStart: true  // Changed to true by default
+        autoStart: true
     }
 };
+
+// Keep service worker alive
+let keepAliveInterval;
+
+function startKeepAlive() {
+    // Ping every 20 seconds to prevent service worker suspension
+    keepAliveInterval = setInterval(() => {
+        if (transcriptionState.isActive) {
+            // Keep the service worker active
+            chrome.storage.local.get(['keepAlive'], () => {
+                // Just accessing storage keeps it alive
+            });
+            
+            // Ensure offscreen document stays alive
+            chrome.runtime.sendMessage({ type: 'keepalive' }).catch(() => {
+                // Recreate offscreen if it was terminated
+                offscreenCreated = false;
+                createOffscreenDocument();
+            });
+        }
+    }, 20000); // Every 20 seconds
+}
+
+function stopKeepAlive() {
+    if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+    }
+}
 
 // Load saved settings
 chrome.storage.local.get(['settings', 'transcripts'], (result) => {
@@ -28,6 +57,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     switch (request.type) {
         case 'stream_ready':
             console.log('Background: Stream ready', request);
+            // Create offscreen document if needed
+            createOffscreenDocument();
             // Update popup if open
             chrome.runtime.sendMessage({
                 type: 'update_popup',
@@ -35,6 +66,69 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     streamReady: true,
                     trackCount: request.trackCount
                 }
+            });
+            break;
+            
+        case 'audio_data':
+            // Forward audio data to offscreen document
+            if (transcriptionState.isActive && offscreenCreated) {
+                chrome.runtime.sendMessage({
+                    type: 'process_audio',
+                    data: request.data
+                });
+            }
+            break;
+            
+        case 'worker_message':
+            // Handle messages from worker via offscreen document
+            const { type, text, isFinal, error, message } = request.data;
+            
+            switch (type) {
+                case 'ready':
+                    console.log('Background: Vosk ready!');
+                    if (transcriptionState.currentTab) {
+                        chrome.tabs.sendMessage(transcriptionState.currentTab, {
+                            type: 'worker_ready'
+                        });
+                    }
+                    break;
+                    
+                case 'status':
+                    console.log('Background: Worker status:', message);
+                    break;
+                    
+                case 'transcript':
+                    if (isFinal && text.trim() !== '' && transcriptionState.currentTab) {
+                        chrome.tabs.get(transcriptionState.currentTab, (tab) => {
+                            handleTranscriptionResult({
+                                transcript: text,
+                                timestamp: Date.now(),
+                                confidence: 0.9
+                            }, tab);
+                        });
+                    } else if (!isFinal && text.trim() !== '') {
+                        chrome.runtime.sendMessage({
+                            type: 'interim_update',
+                            transcript: text
+                        });
+                    }
+                    break;
+                    
+                case 'error':
+                    console.error('Background: Worker error:', error);
+                    chrome.runtime.sendMessage({
+                        type: 'error_update',
+                        error: error
+                    });
+                    break;
+            }
+            break;
+            
+        case 'worker_error':
+            console.error('Background: Worker error:', request.error);
+            chrome.runtime.sendMessage({
+                type: 'error_update',
+                error: request.error
             });
             break;
 
@@ -120,11 +214,43 @@ function handleTranscriptionResult(data, tab) {
 function toggleTranscription(tab) {
     if (!tab) return;
 
+    // First check if content script is loaded
+    chrome.tabs.sendMessage(tab.id, { type: 'ping' }, (response) => {
+        if (chrome.runtime.lastError) {
+            console.log('Content script not loaded, injecting...');
+            // Inject content script
+            chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['content.js']
+            }, () => {
+                // After injection, toggle transcription
+                setTimeout(() => {
+                    toggleTranscriptionInternal(tab);
+                }, 500);
+            });
+        } else {
+            // Content script is loaded, proceed
+            toggleTranscriptionInternal(tab);
+        }
+    });
+}
+
+function toggleTranscriptionInternal(tab) {
     transcriptionState.isActive = !transcriptionState.isActive;
     transcriptionState.currentTab = transcriptionState.isActive ? tab.id : null;
 
     chrome.tabs.sendMessage(tab.id, {
         type: transcriptionState.isActive ? 'start_transcription' : 'stop_transcription'
+    }, (response) => {
+        if (chrome.runtime.lastError) {
+            console.error('Failed to toggle transcription:', chrome.runtime.lastError);
+            transcriptionState.isActive = false;
+            transcriptionState.currentTab = null;
+        } else if (transcriptionState.isActive) {
+            startKeepAlive();
+        } else {
+            stopKeepAlive();
+        }
     });
 
     updateIcon(transcriptionState.isActive);
@@ -136,7 +262,6 @@ function updateIcon(isActive) {
         chrome.action.setBadgeText({ text: 'REC' });
         chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
     } else {
-        // Clear the badge when not recording
         chrome.action.setBadgeText({ text: '' });
     }
 }

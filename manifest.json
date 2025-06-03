@@ -8,7 +8,9 @@
     "activeTab",
     "storage",
     "tabs",
-    "downloads"
+    "downloads",
+    "scripting",
+    "offscreen"
   ],
   
   "host_permissions": [
@@ -29,7 +31,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["inject.js", "transcription-worker.js", "audio-processor.js"],
+      "resources": ["inject.js", "transcription-worker.js", "audio-processor.js", "vosk.js", "vosk-model-small-en-us-0.15.zip", "offscreen.html", "offscreen.js"],
       "matches": ["https://vtf.t3live.com/*"]
     }
   ],
