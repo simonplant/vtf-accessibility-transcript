@@ -35,7 +35,13 @@ async function initializeVosk() {
             script.onload = resolve;
         });
         
-        console.log('Offscreen: Vosk library loaded');
+        console.log('Offscreen: Vosk library loaded, window.Vosk:', window.Vosk);
+        // Also log to service worker
+        chrome.runtime.sendMessage({
+            type: 'worker_message',
+            data: { type: 'status', message: 'Vosk object: ' + (window.Vosk ? 'loaded' : 'undefined') }
+        });
+        
         chrome.runtime.sendMessage({
             type: 'worker_message',
             data: { type: 'status', message: 'Loading model (40MB)...' }
@@ -45,8 +51,14 @@ async function initializeVosk() {
         const modelUrl = chrome.runtime.getURL('vosk-model-small-en-us-0.15');
         console.log('Offscreen: Loading model from:', modelUrl);
         
-        model = await window.Vosk.createModel(modelUrl);
-        console.log('Offscreen: Model loaded!');
+        try {
+            console.log('Offscreen: Calling Vosk.createModel...');
+            model = await window.Vosk.createModel(modelUrl);
+            console.log('Offscreen: Model loaded!');
+        } catch (err) {
+            console.error('Offscreen: createModel failed:', err);
+            throw err;
+        }
         
         // Create recognizer
         recognizer = new model.KaldiRecognizer(16000);
