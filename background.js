@@ -132,8 +132,13 @@ function toggleTranscription(tab) {
 
 // Update extension icon
 function updateIcon(isActive) {
-    chrome.action.setBadgeText({ text: isActive ? 'REC' : '' });
-    chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
+    if (isActive) {
+        chrome.action.setBadgeText({ text: 'REC' });
+        chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
+    } else {
+        // Clear the badge when not recording
+        chrome.action.setBadgeText({ text: '' });
+    }
 }
 
 // Save transcripts to storage
