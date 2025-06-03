@@ -156,10 +156,16 @@ function updateTranscriptDisplay() {
     }
     
     const html = transcriptLines.map(line => {
-        const time = new Date(line.timestamp).toLocaleTimeString();
+        const time = new Date(line.timestamp).toLocaleTimeString('en-US', {
+            timeZone: 'America/New_York',
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
         return `
             <div class="transcript-entry">
-                <div class="transcript-time">${time}</div>
+                <div class="transcript-time">${time} ET</div>
                 <div class="transcript-text">${escapeHtml(line.text)}</div>
             </div>
         `;

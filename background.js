@@ -7,9 +7,9 @@ let transcriptionState = {
     transcripts: [],
     settings: {
         saveTranscripts: true,
-        timestampFormat: '12h', // or '24h'
+        timestampFormat: '12h', // 12-hour format (not 24h)
         speakerLabels: true,
-        autoStart: false
+        autoStart: true  // Changed to true by default
     }
 };
 
@@ -154,15 +154,23 @@ function exportTranscript(sendResponse) {
     let currentDate = '';
     transcripts.forEach(t => {
         const date = new Date(t.timestamp);
-        const dateStr = date.toLocaleDateString();
+        const dateStr = date.toLocaleDateString('en-US', { 
+            timeZone: 'America/New_York' 
+        });
         
         if (dateStr !== currentDate) {
             currentDate = dateStr;
             output += `\n--- ${dateStr} ---\n\n`;
         }
         
-        const timeStr = date.toLocaleTimeString();
-        output += `[${timeStr}] ${t.text}\n`;
+        const timeStr = date.toLocaleTimeString('en-US', {
+            timeZone: 'America/New_York',
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: transcriptionState.settings.timestampFormat === '12h'
+        });
+        output += `[${timeStr} ET] ${t.text}\n`;
     });
 
     // Create blob and download URL
