@@ -3,11 +3,25 @@ console.log('Offscreen document loaded');
 
 let transcriptionWorker = null;
 let isReady = false;
+let keepAliveInterval = null;
+
+// Keep offscreen document alive during initialization
+function startKeepAlive() {
+    keepAliveInterval = setInterval(() => {
+        // Just having a timer keeps the document alive
+        if (isReady && keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+        }
+    }, 1000); // Every second during init
+}
 
 // Initialize transcription worker
 async function initializeWorker() {
     try {
         console.log('Offscreen: Creating worker...');
+        startKeepAlive(); // Keep alive during initialization
+        
         transcriptionWorker = new Worker('transcription-worker.js');
         
         transcriptionWorker.onmessage = (event) => {
@@ -16,6 +30,12 @@ async function initializeWorker() {
                 type: 'worker_message',
                 data: event.data
             });
+            
+            // Mark ready when Vosk is initialized
+            if (event.data.type === 'ready') {
+                isReady = true;
+                console.log('Offscreen: Worker ready, stopping keep-alive');
+            }
         };
         
         transcriptionWorker.onerror = (error) => {
@@ -28,7 +48,6 @@ async function initializeWorker() {
         
         // Initialize Vosk
         transcriptionWorker.postMessage({ type: 'init' });
-        isReady = true;
         
     } catch (error) {
         console.error('Offscreen: Failed to create worker:', error);
@@ -39,7 +58,7 @@ async function initializeWorker() {
     }
 }
 
-// Keep worker alive
+// Keep worker alive with periodic activity
 setInterval(() => {
     if (transcriptionWorker && isReady) {
         // Send empty message to keep worker active
@@ -51,7 +70,7 @@ setInterval(() => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     switch (request.type) {
         case 'init_worker':
-            if (!isReady) {
+            if (!isReady && !transcriptionWorker) {
                 initializeWorker();
             }
             break;
@@ -76,6 +95,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse({ alive: true });
             break;
     }
+    
+    return false;
 });
 
 // Initialize immediately
