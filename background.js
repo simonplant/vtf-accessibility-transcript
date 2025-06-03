@@ -18,19 +18,27 @@ let keepAliveInterval;
 
 function startKeepAlive() {
     // Ping every 20 seconds to prevent service worker suspension
-    keepAliveInterval = setInterval(() => {
+    keepAliveInterval = setInterval(async () => {
         if (transcriptionState.isActive) {
             // Keep the service worker active
             chrome.storage.local.get(['keepAlive'], () => {
                 // Just accessing storage keeps it alive
             });
             
-            // Ensure offscreen document stays alive
-            chrome.runtime.sendMessage({ type: 'keepalive' }).catch(() => {
-                // Recreate offscreen if it was terminated
-                offscreenCreated = false;
-                createOffscreenDocument();
-            });
+            // Check if offscreen document is still alive
+            try {
+                const contexts = await chrome.runtime.getContexts({
+                    contextTypes: ['OFFSCREEN_DOCUMENT']
+                });
+                
+                if (contexts.length === 0) {
+                    console.log('Background: Offscreen document terminated, recreating...');
+                    offscreenCreated = false;
+                    createOffscreenDocument();
+                }
+            } catch (error) {
+                console.error('Background: Error checking offscreen document:', error);
+            }
         }
     }, 20000); // Every 20 seconds
 }
