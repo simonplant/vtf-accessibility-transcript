@@ -77,16 +77,6 @@ vtfTest.tone(440, 1000);
 vtfTest.vtfSound(7);
 ```
 
-## Files to Delete (from failed attempts)
-
-- transcription-worker.js
-- test-worker.js
-- audio-processor.js
-- transcription.js
-- vosk-iframe.html
-- vosk.js (if switching to different library)
-- vosk-model-small-en-us-0.15/
-- vosk-model-small-en-us-0.15.zip
 
 ### Run
 ```bash
