@@ -31,7 +31,18 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["inject.js", "transcription-worker.js", "audio-processor.js", "vosk.js", "vosk-model-small-en-us-0.15.zip", "offscreen.html", "offscreen.js"],
+      "resources": [
+        "inject.js", 
+        "transcription-worker.js", 
+        "audio-processor.js", 
+        "vosk.js", 
+        "vosk-model-small-en-us-0.15.zip",
+        "vosk-model-small-en-us-0.15/*",
+        "vosk-model-small-en-us-0.15/*/*",
+        "vosk-model-small-en-us-0.15/*/*/*",
+        "offscreen.html", 
+        "offscreen.js"
+      ],
       "matches": ["https://vtf.t3live.com/*"]
     }
   ],

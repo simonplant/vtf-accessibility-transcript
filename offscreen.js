@@ -1,56 +1,66 @@
-// offscreen.js - Runs transcription worker in offscreen document
+// offscreen.js - Runs Vosk transcription directly (no worker)
 console.log('Offscreen document loaded');
 
-let transcriptionWorker = null;
+let recognizer = null;
+let model = null;
 let isReady = false;
-let keepAliveInterval = null;
+let audioContext = null;
 
-// Keep offscreen document alive during initialization
-function startKeepAlive() {
-    keepAliveInterval = setInterval(() => {
-        // Just having a timer keeps the document alive
-        if (isReady && keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-            keepAliveInterval = null;
-        }
-    }, 1000); // Every second during init
+// Create audio context to keep document active
+function createDummyAudio() {
+    if (!audioContext) {
+        audioContext = new AudioContext();
+        // Create a silent source to keep context active
+        const source = audioContext.createConstantSource();
+        source.offset.value = 0; // Silent
+        source.connect(audioContext.destination);
+        source.start();
+        console.log('Offscreen: Created audio context to stay active');
+    }
 }
 
-// Initialize transcription worker
-async function initializeWorker() {
+// Initialize Vosk directly (no worker)
+async function initializeVosk() {
     try {
-        console.log('Offscreen: Creating worker...');
-        startKeepAlive(); // Keep alive during initialization
+        console.log('Offscreen: Loading Vosk...');
+        createDummyAudio(); // Keep document active
         
-        transcriptionWorker = new Worker('transcription-worker.js');
+        // Load Vosk library
+        const script = document.createElement('script');
+        script.src = 'vosk.js';
+        document.head.appendChild(script);
         
-        transcriptionWorker.onmessage = (event) => {
-            // Forward all messages to background
-            chrome.runtime.sendMessage({
-                type: 'worker_message',
-                data: event.data
-            });
-            
-            // Mark ready when Vosk is initialized
-            if (event.data.type === 'ready') {
-                isReady = true;
-                console.log('Offscreen: Worker ready, stopping keep-alive');
-            }
-        };
+        // Wait for Vosk to be available
+        await new Promise((resolve) => {
+            script.onload = resolve;
+        });
         
-        transcriptionWorker.onerror = (error) => {
-            console.error('Offscreen: Worker error:', error);
-            chrome.runtime.sendMessage({
-                type: 'worker_error',
-                error: error.toString()
-            });
-        };
+        console.log('Offscreen: Vosk library loaded');
+        chrome.runtime.sendMessage({
+            type: 'worker_message',
+            data: { type: 'status', message: 'Loading model (40MB)...' }
+        });
         
-        // Initialize Vosk
-        transcriptionWorker.postMessage({ type: 'init' });
+        // Load model - use the unzipped folder instead of zip
+        const modelUrl = chrome.runtime.getURL('vosk-model-small-en-us-0.15');
+        console.log('Offscreen: Loading model from:', modelUrl);
+        
+        model = await window.Vosk.createModel(modelUrl);
+        console.log('Offscreen: Model loaded!');
+        
+        // Create recognizer
+        recognizer = new model.KaldiRecognizer(16000);
+        
+        isReady = true;
+        console.log('Offscreen: Vosk ready!');
+        
+        chrome.runtime.sendMessage({
+            type: 'worker_message',
+            data: { type: 'ready' }
+        });
         
     } catch (error) {
-        console.error('Offscreen: Failed to create worker:', error);
+        console.error('Offscreen: Vosk init error:', error);
         chrome.runtime.sendMessage({
             type: 'worker_error',
             error: error.toString()
@@ -58,40 +68,83 @@ async function initializeWorker() {
     }
 }
 
-// Keep worker alive with periodic activity
-setInterval(() => {
-    if (transcriptionWorker && isReady) {
-        // Send empty message to keep worker active
-        transcriptionWorker.postMessage({ type: 'keepalive' });
+// Process audio data
+function processAudio(audioData) {
+    if (!isReady || !recognizer) return;
+    
+    try {
+        const result = recognizer.acceptWaveform(audioData);
+        
+        if (result) {
+            const resultJson = JSON.parse(recognizer.result());
+            if (resultJson.text && resultJson.text.trim() !== '') {
+                chrome.runtime.sendMessage({
+                    type: 'worker_message',
+                    data: {
+                        type: 'transcript',
+                        text: resultJson.text,
+                        isFinal: true,
+                        timestamp: Date.now()
+                    }
+                });
+            }
+        } else {
+            const partialJson = JSON.parse(recognizer.partialResult());
+            if (partialJson.partial && partialJson.partial.trim() !== '') {
+                chrome.runtime.sendMessage({
+                    type: 'worker_message',
+                    data: {
+                        type: 'transcript',
+                        text: partialJson.partial,
+                        isFinal: false,
+                        timestamp: Date.now()
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Offscreen: Process error:', error);
     }
-}, 30000); // Every 30 seconds
+}
 
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Keep audio context active on any message
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
     switch (request.type) {
         case 'init_worker':
-            if (!isReady && !transcriptionWorker) {
-                initializeWorker();
+            if (!isReady && !model) {
+                initializeVosk();
             }
             break;
             
         case 'process_audio':
-            if (transcriptionWorker && isReady) {
-                transcriptionWorker.postMessage({
-                    type: 'process',
-                    data: new Float32Array(request.data)
-                });
+            if (isReady) {
+                processAudio(new Float32Array(request.data));
             }
             break;
             
         case 'get_final':
-            if (transcriptionWorker) {
-                transcriptionWorker.postMessage({ type: 'final' });
+            if (recognizer) {
+                const finalJson = JSON.parse(recognizer.finalResult());
+                if (finalJson.text && finalJson.text.trim() !== '') {
+                    chrome.runtime.sendMessage({
+                        type: 'worker_message',
+                        data: {
+                            type: 'transcript',
+                            text: finalJson.text,
+                            isFinal: true,
+                            timestamp: Date.now()
+                        }
+                    });
+                }
             }
             break;
             
         case 'keepalive':
-            // Just respond to keep connection alive
             sendResponse({ alive: true });
             break;
     }
@@ -100,4 +153,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Initialize immediately
-initializeWorker();
+initializeVosk();

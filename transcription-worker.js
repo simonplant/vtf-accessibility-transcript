@@ -1,36 +1,76 @@
-// transcription-worker.js - LOCAL Vosk transcription
+// transcription-worker.js - LOCAL Vosk transcription with model caching
 console.log('[Worker] Transcription worker starting...');
-console.log('[Worker] Worker location:', self.location.href);
-
-// Import LOCAL Vosk library with full URL
-try {
-    const voskUrl = new URL('vosk.js', self.location.href).href;
-    console.log('[Worker] Loading Vosk from:', voskUrl);
-    importScripts(voskUrl);
-    console.log('[Worker] Vosk library loaded');
-} catch (e) {
-    console.error('[Worker] Failed to load vosk.js:', e.message);
-    console.error('[Worker] Current directory:', self.location.href);
-}
 
 let recognizer = null;
 let model = null;
 let isReady = false;
 
+// Cache model in IndexedDB to avoid reloading
+async function cacheModel(arrayBuffer) {
+    const db = await openDB();
+    const tx = db.transaction(['models'], 'readwrite');
+    await tx.objectStore('models').put(arrayBuffer, 'vosk-model');
+    await tx.complete;
+}
+
+async function getCachedModel() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(['models'], 'readonly');
+        return await tx.objectStore('models').get('vosk-model');
+    } catch (e) {
+        return null;
+    }
+}
+
+async function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('VoskModels', 1);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('models')) {
+                db.createObjectStore('models');
+            }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e);
+    });
+}
+
 // Initialize Vosk
 async function initializeVosk() {
     try {
-        console.log('[Worker] Loading Vosk model...');
-        postMessage({ type: 'status', message: 'Loading model (40MB)...' });
+        console.log('[Worker] Initializing Vosk...');
         
-        // Load the model from LOCAL file
-        const modelUrl = new URL('vosk-model-small-en-us-0.15.zip', self.location.href).href;
-        console.log('[Worker] Model URL:', modelUrl);
+        // Import Vosk
+        const voskUrl = new URL('vosk.js', self.location.href).href;
+        importScripts(voskUrl);
         
-        model = await Vosk.createModel(modelUrl);
-        console.log('[Worker] Model loaded successfully!');
+        // Check for cached model first
+        let modelData = await getCachedModel();
         
-        // Create recognizer with 16kHz sample rate
+        if (modelData) {
+            console.log('[Worker] Using cached model');
+            postMessage({ type: 'status', message: 'Using cached model...' });
+        } else {
+            console.log('[Worker] Downloading model...');
+            postMessage({ type: 'status', message: 'Downloading model (40MB)...' });
+            
+            // Download model
+            const modelUrl = new URL('vosk-model-small-en-us-0.15.zip', self.location.href).href;
+            const response = await fetch(modelUrl);
+            modelData = await response.arrayBuffer();
+            
+            // Cache for next time
+            await cacheModel(modelData);
+            console.log('[Worker] Model cached');
+        }
+        
+        // Create model from data
+        postMessage({ type: 'status', message: 'Loading model...' });
+        model = await Vosk.createModel(modelData);
+        
+        // Create recognizer
         recognizer = new model.KaldiRecognizer(16000);
         
         isReady = true;
@@ -45,17 +85,12 @@ async function initializeVosk() {
 
 // Process audio data
 function processAudio(audioData) {
-    if (!isReady || !recognizer) {
-        console.warn('[Worker] Vosk not ready yet');
-        return;
-    }
+    if (!isReady || !recognizer) return;
     
     try {
-        // Process the audio chunk
         const result = recognizer.acceptWaveform(audioData);
         
         if (result) {
-            // Final result
             const resultJson = JSON.parse(recognizer.result());
             if (resultJson.text && resultJson.text.trim() !== '') {
                 postMessage({
@@ -66,7 +101,6 @@ function processAudio(audioData) {
                 });
             }
         } else {
-            // Partial result
             const partialJson = JSON.parse(recognizer.partialResult());
             if (partialJson.partial && partialJson.partial.trim() !== '') {
                 postMessage({
@@ -79,11 +113,10 @@ function processAudio(audioData) {
         }
     } catch (error) {
         console.error('[Worker] Process error:', error);
-        postMessage({ type: 'error', error: error.message });
     }
 }
 
-// Handle messages from main thread
+// Handle messages
 self.addEventListener('message', async (event) => {
     const { type, data } = event.data;
     
@@ -97,7 +130,7 @@ self.addEventListener('message', async (event) => {
             break;
             
         case 'reset':
-            if (recognizer) {
+            if (recognizer && model) {
                 recognizer = new model.KaldiRecognizer(16000);
             }
             break;
@@ -115,7 +148,9 @@ self.addEventListener('message', async (event) => {
                 }
             }
             break;
+            
+        case 'keepalive':
+            // Just ignore keepalive messages
+            break;
     }
 });
-
-console.log('[Worker] Transcription worker loaded');

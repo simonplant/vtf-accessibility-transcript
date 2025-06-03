@@ -15,7 +15,6 @@ let transcriptionState = {
 
 // Offscreen document for worker
 let offscreenCreated = false;
-let keepAliveInterval;
 
 // Create offscreen document
 async function createOffscreenDocument() {
@@ -39,31 +38,15 @@ async function createOffscreenDocument() {
 }
 
 // Keep service worker alive
+let keepAliveInterval;
+
 function startKeepAlive() {
-    // Ping every 20 seconds to prevent service worker suspension
-    keepAliveInterval = setInterval(async () => {
+    keepAliveInterval = setInterval(() => {
         if (transcriptionState.isActive) {
-            // Keep the service worker active
-            chrome.storage.local.get(['keepAlive'], () => {
-                // Just accessing storage keeps it alive
-            });
-            
-            // Check if offscreen document is still alive
-            try {
-                const contexts = await chrome.runtime.getContexts({
-                    contextTypes: ['OFFSCREEN_DOCUMENT']
-                });
-                
-                if (contexts.length === 0) {
-                    console.log('Background: Offscreen document terminated, recreating...');
-                    offscreenCreated = false;
-                    await createOffscreenDocument();
-                }
-            } catch (error) {
-                console.error('Background: Error checking offscreen document:', error);
-            }
+            // Just keep service worker alive
+            chrome.storage.local.get(['keepAlive'], () => {});
         }
-    }, 20000); // Every 20 seconds
+    }, 20000);
 }
 
 function stopKeepAlive() {
