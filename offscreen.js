@@ -1,8 +1,6 @@
-// offscreen.js - Runs Vosk transcription directly (no worker)
+// offscreen.js - Handles audio processing and transcription
 console.log('Offscreen document loaded');
 
-let recognizer = null;
-let model = null;
 let isReady = false;
 let audioContext = null;
 
@@ -10,7 +8,6 @@ let audioContext = null;
 function createDummyAudio() {
     if (!audioContext) {
         audioContext = new AudioContext();
-        // Create a silent source to keep context active
         const source = audioContext.createConstantSource();
         source.offset.value = 0; // Silent
         source.connect(audioContext.destination);
@@ -19,52 +16,26 @@ function createDummyAudio() {
     }
 }
 
-// Initialize Vosk directly (no worker)
-async function initializeVosk() {
+// Initialize transcription
+async function initializeTranscription() {
     try {
-        console.log('Offscreen: Loading Vosk...');
+        console.log('Offscreen: Initializing transcription...');
         createDummyAudio(); // Keep document active
         
-        // Load Vosk library
-        const script = document.createElement('script');
-        script.src = 'vosk.js';
-        document.head.appendChild(script);
+        // TODO: Replace this section with a working speech recognition library
+        // Requirements:
+        // 1. Must work with Manifest V3 (no eval/unsafe-inline)
+        // 2. Must process Float32Array audio chunks
+        // 3. Must work offline
+        // 4. Suggested libraries to research:
+        //    - Whisper ONNX Web
+        //    - TensorFlow.js with speech model
+        //    - whisper.cpp compiled to WASM
+        //    - Any WASM-based speech recognition
         
-        // Wait for Vosk to be available
-        await new Promise((resolve) => {
-            script.onload = resolve;
-        });
-        
-        console.log('Offscreen: Vosk library loaded, window.Vosk:', window.Vosk);
-        // Also log to service worker
-        chrome.runtime.sendMessage({
-            type: 'worker_message',
-            data: { type: 'status', message: 'Vosk object: ' + (window.Vosk ? 'loaded' : 'undefined') }
-        });
-        
-        chrome.runtime.sendMessage({
-            type: 'worker_message',
-            data: { type: 'status', message: 'Loading model (40MB)...' }
-        });
-        
-        // Load model - use the unzipped folder instead of zip
-        const modelUrl = chrome.runtime.getURL('vosk-model-small-en-us-0.15');
-        console.log('Offscreen: Loading model from:', modelUrl);
-        
-        try {
-            console.log('Offscreen: Calling Vosk.createModel...');
-            model = await window.Vosk.createModel(modelUrl);
-            console.log('Offscreen: Model loaded!');
-        } catch (err) {
-            console.error('Offscreen: createModel failed:', err);
-            throw err;
-        }
-        
-        // Create recognizer
-        recognizer = new model.KaldiRecognizer(16000);
-        
+        // For now, just mark as ready and log audio data
         isReady = true;
-        console.log('Offscreen: Vosk ready!');
+        console.log('Offscreen: Ready (no transcription library loaded yet)');
         
         chrome.runtime.sendMessage({
             type: 'worker_message',
@@ -72,7 +43,7 @@ async function initializeVosk() {
         });
         
     } catch (error) {
-        console.error('Offscreen: Vosk init error:', error);
+        console.error('Offscreen: Init error:', error);
         chrome.runtime.sendMessage({
             type: 'worker_error',
             error: error.toString()
@@ -82,77 +53,47 @@ async function initializeVosk() {
 
 // Process audio data
 function processAudio(audioData) {
-    if (!isReady || !recognizer) return;
+    if (!isReady) return;
     
-    try {
-        const result = recognizer.acceptWaveform(audioData);
-        
-        if (result) {
-            const resultJson = JSON.parse(recognizer.result());
-            if (resultJson.text && resultJson.text.trim() !== '') {
-                chrome.runtime.sendMessage({
-                    type: 'worker_message',
-                    data: {
-                        type: 'transcript',
-                        text: resultJson.text,
-                        isFinal: true,
-                        timestamp: Date.now()
-                    }
-                });
-            }
-        } else {
-            const partialJson = JSON.parse(recognizer.partialResult());
-            if (partialJson.partial && partialJson.partial.trim() !== '') {
-                chrome.runtime.sendMessage({
-                    type: 'worker_message',
-                    data: {
-                        type: 'transcript',
-                        text: partialJson.partial,
-                        isFinal: false,
-                        timestamp: Date.now()
-                    }
-                });
-            }
-        }
-    } catch (error) {
-        console.error('Offscreen: Process error:', error);
-    }
+    // TODO: Process audio with speech recognition library
+    // For now, just log that we received audio
+    
+    // Uncomment to see audio data flow:
+    // console.log('Offscreen: Received audio chunk, length:', audioData.length);
+    
+    // Example of how transcription results should be sent:
+    /*
+    const transcriptionResult = {
+        type: 'transcript',
+        text: 'transcribed text here',
+        isFinal: true,
+        timestamp: Date.now()
+    };
+    
+    chrome.runtime.sendMessage({
+        type: 'worker_message',
+        data: transcriptionResult
+    });
+    */
 }
 
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Keep audio context active on any message
+    // Keep audio context active
     if (audioContext && audioContext.state === 'suspended') {
         audioContext.resume();
     }
     
     switch (request.type) {
         case 'init_worker':
-            if (!isReady && !model) {
-                initializeVosk();
+            if (!isReady) {
+                initializeTranscription();
             }
             break;
             
         case 'process_audio':
             if (isReady) {
                 processAudio(new Float32Array(request.data));
-            }
-            break;
-            
-        case 'get_final':
-            if (recognizer) {
-                const finalJson = JSON.parse(recognizer.finalResult());
-                if (finalJson.text && finalJson.text.trim() !== '') {
-                    chrome.runtime.sendMessage({
-                        type: 'worker_message',
-                        data: {
-                            type: 'transcript',
-                            text: finalJson.text,
-                            isFinal: true,
-                            timestamp: Date.now()
-                        }
-                    });
-                }
             }
             break;
             
@@ -165,4 +106,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Initialize immediately
-initializeVosk();
+initializeTranscription();
