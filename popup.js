@@ -82,31 +82,35 @@ settingsBtn.addEventListener('click', () => {
 
 // Message listener
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    switch (request.type) {
-        case 'update_popup':
-            if (request.data.streamReady) {
-                audioSources.textContent = `${request.data.trackCount} audio source${request.data.trackCount > 1 ? 's' : ''} connected`;
-                audioSources.classList.add('success');
-            }
-            break;
-            
-        case 'new_transcript':
-            addTranscriptLine(request.transcript);
-            break;
-            
-        case 'interim_update':
-            showInterimTranscript(request.transcript);
-            break;
-            
-        case 'error_update':
-            showError(request.error);
-            break;
-            
-        case 'transcript_cleared':
-            transcriptLines = [];
-            updateTranscriptDisplay();
-            showMessage('Transcript cleared');
-            break;
+    try {
+        switch (request.type) {
+            case 'update_popup':
+                if (request.data.streamReady) {
+                    audioSources.textContent = `${request.data.trackCount} audio source${request.data.trackCount > 1 ? 's' : ''} connected`;
+                    audioSources.classList.add('success');
+                }
+                break;
+                
+            case 'new_transcript':
+                addTranscriptLine(request.transcript);
+                break;
+                
+            case 'interim_update':
+                showInterimTranscript(request.transcript);
+                break;
+                
+            case 'error_update':
+                showError(request.error);
+                break;
+                
+            case 'transcript_cleared':
+                transcriptLines = [];
+                updateTranscriptDisplay();
+                showMessage('Transcript cleared');
+                break;
+        }
+    } catch (error) {
+        console.error('Error handling message:', error);
     }
 });
 
@@ -224,18 +228,37 @@ async function checkAudioStatus() {
     try {
         chrome.tabs.sendMessage(tab.id, { type: 'check_audio' }, (response) => {
             if (chrome.runtime.lastError) {
-                audioSources.textContent = 'Loading...';
-                setTimeout(checkAudioStatus, 2000);
+                console.log('Content script not ready:', chrome.runtime.lastError.message);
+                audioSources.textContent = 'Initializing...';
+                audioSources.classList.remove('success');
+                
+                // Try to inject content script if it's not there
+                if (chrome.runtime.lastError.message.includes('Receiving end does not exist')) {
+                    chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        files: ['content.js']
+                    }, () => {
+                        if (!chrome.runtime.lastError) {
+                            console.log('Content script injected, retrying...');
+                            setTimeout(checkAudioStatus, 1000);
+                        }
+                    });
+                } else {
+                    setTimeout(checkAudioStatus, 2000);
+                }
             } else if (response && response.audioReady) {
                 audioSources.textContent = 'Audio ready';
                 audioSources.classList.add('success');
             } else {
                 audioSources.textContent = 'Waiting for audio...';
+                audioSources.classList.remove('success');
                 setTimeout(checkAudioStatus, 2000);
             }
         });
     } catch (e) {
         console.error('Error checking audio:', e);
+        audioSources.textContent = 'Error checking audio';
+        audioSources.classList.remove('success');
     }
 }
 

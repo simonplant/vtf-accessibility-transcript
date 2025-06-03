@@ -13,9 +13,32 @@ let transcriptionState = {
     }
 };
 
-// Keep service worker alive
+// Offscreen document for worker
+let offscreenCreated = false;
 let keepAliveInterval;
 
+// Create offscreen document
+async function createOffscreenDocument() {
+    if (offscreenCreated) return;
+    
+    try {
+        await chrome.offscreen.createDocument({
+            url: 'offscreen.html',
+            reasons: ['AUDIO_PLAYBACK'],
+            justification: 'Run Vosk transcription worker'
+        });
+        offscreenCreated = true;
+        console.log('Background: Offscreen document created');
+    } catch (error) {
+        if (error.message.includes('already exists')) {
+            offscreenCreated = true;
+        } else {
+            console.error('Background: Failed to create offscreen document:', error);
+        }
+    }
+}
+
+// Keep service worker alive
 function startKeepAlive() {
     // Ping every 20 seconds to prevent service worker suspension
     keepAliveInterval = setInterval(async () => {
@@ -34,7 +57,7 @@ function startKeepAlive() {
                 if (contexts.length === 0) {
                     console.log('Background: Offscreen document terminated, recreating...');
                     offscreenCreated = false;
-                    createOffscreenDocument();
+                    await createOffscreenDocument();
                 }
             } catch (error) {
                 console.error('Background: Error checking offscreen document:', error);
@@ -67,22 +90,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.log('Background: Stream ready', request);
             // Create offscreen document if needed
             createOffscreenDocument();
-            // Update popup if open
+            // Update popup if open - with error handling
             chrome.runtime.sendMessage({
                 type: 'update_popup',
                 data: {
                     streamReady: true,
                     trackCount: request.trackCount
                 }
+            }).catch(() => {
+                // Popup not open, ignore
             });
             break;
             
         case 'audio_data':
             // Forward audio data to offscreen document
             if (transcriptionState.isActive && offscreenCreated) {
+                // Send to all contexts (offscreen will receive it)
                 chrome.runtime.sendMessage({
                     type: 'process_audio',
                     data: request.data
+                }).catch(() => {
+                    // Offscreen might not be ready
                 });
             }
             break;
@@ -108,16 +136,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 case 'transcript':
                     if (isFinal && text.trim() !== '' && transcriptionState.currentTab) {
                         chrome.tabs.get(transcriptionState.currentTab, (tab) => {
-                            handleTranscriptionResult({
-                                transcript: text,
-                                timestamp: Date.now(),
-                                confidence: 0.9
-                            }, tab);
+                            if (!chrome.runtime.lastError && tab) {
+                                handleTranscriptionResult({
+                                    transcript: text,
+                                    timestamp: Date.now(),
+                                    confidence: 0.9
+                                }, tab);
+                            }
                         });
                     } else if (!isFinal && text.trim() !== '') {
                         chrome.runtime.sendMessage({
                             type: 'interim_update',
                             transcript: text
+                        }).catch(() => {
+                            // Popup might be closed
                         });
                     }
                     break;
@@ -127,6 +159,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     chrome.runtime.sendMessage({
                         type: 'error_update',
                         error: error
+                    }).catch(() => {
+                        // Popup might be closed
                     });
                     break;
             }
@@ -137,25 +171,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             chrome.runtime.sendMessage({
                 type: 'error_update',
                 error: request.error
+            }).catch(() => {
+                // Popup might be closed
             });
             break;
 
         case 'transcription_status':
             transcriptionState.isActive = request.status === 'started';
-            // Update icon
             updateIcon(transcriptionState.isActive);
-            break;
-
-        case 'transcription_result':
-            handleTranscriptionResult(request, sender.tab);
-            break;
-
-        case 'interim_transcription':
-            // Forward to popup for real-time display
-            chrome.runtime.sendMessage({
-                type: 'interim_update',
-                transcript: request.transcript
-            });
             break;
 
         case 'transcription_error':
@@ -163,6 +186,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             chrome.runtime.sendMessage({
                 type: 'error_update',
                 error: request.error
+            }).catch(() => {
+                // Popup might be closed
             });
             break;
 
@@ -185,7 +210,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         case 'update_settings':
             updateSettings(request.settings);
             break;
+            
+        case 'heartbeat':
+            // Just acknowledge the heartbeat
+            sendResponse({ alive: true });
+            break;
     }
+    
+    return false;
 });
 
 // Handle transcription results
@@ -215,6 +247,8 @@ function handleTranscriptionResult(data, tab) {
     chrome.runtime.sendMessage({
         type: 'new_transcript',
         transcript: transcript
+    }).catch(() => {
+        // Popup might be closed
     });
 }
 
@@ -339,7 +373,9 @@ function clearTranscript(tab) {
         chrome.tabs.sendMessage(tab.id, { type: 'clear_transcript' });
     }
     
-    chrome.runtime.sendMessage({ type: 'transcript_cleared' });
+    chrome.runtime.sendMessage({ type: 'transcript_cleared' }).catch(() => {
+        // Popup might be closed
+    });
 }
 
 // Update settings
@@ -372,5 +408,18 @@ chrome.tabs.onRemoved.addListener((tabId) => {
         transcriptionState.isActive = false;
         transcriptionState.currentTab = null;
         updateIcon(false);
+        stopKeepAlive();
+    }
+});
+
+// On install/update, reload VTF tabs to prevent orphaned content scripts
+chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'update' || details.reason === 'install') {
+        // Find and reload VTF tabs
+        chrome.tabs.query({ url: 'https://vtf.t3live.com/*' }, (tabs) => {
+            tabs.forEach(tab => {
+                chrome.tabs.reload(tab.id);
+            });
+        });
     }
 });
