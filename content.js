@@ -67,6 +67,16 @@ async function initializeTranscriptionWorker() {
             }
         };
         
+        // Handle worker errors
+        transcriptionWorker.onerror = (error) => {
+            console.error('VTF Transcription: Worker crashed:', error);
+            // Attempt to restart
+            setTimeout(() => {
+                console.log('VTF Transcription: Attempting worker restart...');
+                initializeTranscriptionWorker();
+            }, 2000);
+        };
+        
         // Initialize Vosk in worker
         transcriptionWorker.postMessage({ type: 'init' });
         
@@ -84,25 +94,49 @@ async function setupAudioProcessing() {
                 // Create audio context for processing
                 audioContext = new AudioContext({ sampleRate: 16000 });
                 
-                // We'll use script processor (deprecated but works)
-                // or AudioWorklet (better but more complex)
-                const bufferSize = 4096;
-                audioProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
-                
-                audioProcessor.onaudioprocess = (e) => {
-                    if (!isTranscribing) return;
+                // Try to use AudioWorklet (modern approach)
+                try {
+                    await audioContext.audioWorklet.addModule(
+                        chrome.runtime.getURL('audio-processor.js')
+                    );
                     
-                    const inputData = e.inputBuffer.getChannelData(0);
-                    const pcmData = new Float32Array(inputData);
+                    audioProcessor = new AudioWorkletNode(audioContext, 'vtf-audio-processor');
                     
-                    // Send to worker
-                    if (transcriptionWorker) {
-                        transcriptionWorker.postMessage({
-                            type: 'process',
-                            data: pcmData
-                        });
-                    }
-                };
+                    audioProcessor.port.onmessage = (e) => {
+                        if (!isTranscribing) return;
+                        
+                        if (e.data.type === 'audio' && transcriptionWorker) {
+                            transcriptionWorker.postMessage({
+                                type: 'process',
+                                data: e.data.data
+                            });
+                        }
+                    };
+                    
+                    console.log('VTF Transcription: Using AudioWorklet (modern)');
+                    
+                } catch (workletError) {
+                    // Fallback to ScriptProcessor if AudioWorklet fails
+                    console.log('VTF Transcription: Falling back to ScriptProcessor');
+                    
+                    const bufferSize = 4096;
+                    audioProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+                    
+                    audioProcessor.onaudioprocess = (e) => {
+                        if (!isTranscribing) return;
+                        
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        const pcmData = new Float32Array(inputData);
+                        
+                        // Send to worker
+                        if (transcriptionWorker) {
+                            transcriptionWorker.postMessage({
+                                type: 'process',
+                                data: pcmData
+                            });
+                        }
+                    };
+                }
                 
                 // Request access to the stream from inject.js
                 window.postMessage({ type: 'VTF_REQUEST_STREAM' }, '*');
@@ -121,6 +155,10 @@ async function setupAudioProcessing() {
                 console.log('VTF Transcription: Audio pipeline connected');
             } catch (error) {
                 console.error('VTF Transcription: Stream connection error:', error);
+                chrome.runtime.sendMessage({
+                    type: 'transcription_error',
+                    error: 'Failed to connect audio stream'
+                });
             }
         }
     });

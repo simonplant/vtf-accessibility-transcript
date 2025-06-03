@@ -1,151 +1,227 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>VTF Transcriber Options</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTF Transcription Options</title>
     <style>
+        @import url('https://fonts.googleapis.com/css?family=Lato:400,700,400italic');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+        
+        :root {
+            --blue: #375a7f;
+            --indigo: #6610f2;
+            --purple: #6f42c1;
+            --pink: #e83e8c;
+            --red: #e74c3c;
+            --orange: #fd7e14;
+            --yellow: #f39c12;
+            --green: #00bc8c;
+            --teal: #20c997;
+            --cyan: #3498db;
+            --gray: #999;
+            --gray-dark: #303030;
+            --primary: #375a7f;
+            --secondary: #444;
+            --success: #00bc8c;
+            --info: #3498db;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --light: #303030;
+            --dark: #adb5bd;
+        }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 20px;
+            font-family: 'Lato', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: #f5f5f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
         }
-        .container {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 20px;
+            margin: -20px -20px 20px -20px;
+            text-align: center;
         }
+        
         h1 {
-            color: #1976d2;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 500;
+        }
+        
+        .option-group {
+            background: white;
+            border-radius: 4px;
+            padding: 20px;
             margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
         }
-        .section {
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #e0e0e0;
+        
+        .option-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #f0f0f0;
         }
-        .section:last-child {
+        
+        .option-row:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
             border-bottom: none;
         }
-        h2 {
-            font-size: 18px;
-            margin-bottom: 15px;
+        
+        .option-label {
+            flex: 1;
         }
-        .option-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 10px;
-            cursor: pointer;
-        }
-        input[type="checkbox"] {
-            margin-right: 8px;
-        }
-        button {
-            background: #1976d2;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
+        
+        .option-label h3 {
+            margin: 0 0 5px 0;
             font-size: 16px;
+            font-weight: 600;
         }
-        button:hover {
-            background: #1565c0;
+        
+        .option-label p {
+            margin: 0;
+            font-size: 14px;
+            color: #666;
         }
-        .status {
+        
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 26px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: var(--success);
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        
+        .save-status {
+            text-align: center;
             margin-top: 10px;
-            padding: 10px;
-            border-radius: 4px;
-            display: none;
+            font-size: 14px;
+            color: var(--success);
+            opacity: 0;
+            transition: opacity 0.3s;
         }
-        .status.success {
-            background: #e8f5e9;
-            color: #2e7d32;
-            display: block;
+        
+        .save-status.show {
+            opacity: 1;
         }
-        .info {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            color: #1565c0;
+        
+        .footer {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 30px;
         }
-        .warning {
-            background: #fff3cd;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            color: #856404;
+        
+        .footer a {
+            color: var(--primary);
+            text-decoration: none;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>VTF Audio Transcriber Settings</h1>
-        
-        <div class="info">
-            <strong>How it works:</strong> This extension captures audio from the VTF trading floor and uses your browser's built-in speech recognition to create transcripts. No external API keys required!
+    <div class="header">
+        <h1>VTF Transcription Options</h1>
+    </div>
+    
+    <div class="option-group">
+        <div class="option-row">
+            <div class="option-label">
+                <h3>Save Transcripts</h3>
+                <p>Automatically save transcripts to browser storage</p>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="saveTranscripts" checked>
+                <span class="toggle-slider"></span>
+            </label>
         </div>
         
-        <div class="warning">
-            <strong>Note:</strong> For best results, make sure your system audio is routed properly. The extension will show audio levels when sound is detected.
+        <div class="option-row">
+            <div class="option-label">
+                <h3>Auto-Start</h3>
+                <p>Automatically start transcription when visiting VTF</p>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="autoStart" checked>
+                <span class="toggle-slider"></span>
+            </label>
         </div>
         
-        <div class="section">
-            <h2>General Settings</h2>
-            <div class="option-group">
-                <label>
-                    <input type="checkbox" id="auto-start"> 
-                    Automatically start transcription when VTF page loads
-                </label>
+        <div class="option-row">
+            <div class="option-label">
+                <h3>Speaker Labels</h3>
+                <p>Attempt to identify different speakers (experimental)</p>
             </div>
-            <div class="option-group">
-                <label>
-                    <input type="checkbox" id="save-transcripts" checked> 
-                    Save transcripts locally
-                </label>
-            </div>
-            <div class="option-group">
-                <label>
-                    <input type="checkbox" id="show-interim"> 
-                    Show interim transcription results (live preview)
-                </label>
-            </div>
-            <div class="option-group">
-                <label>
-                    <input type="checkbox" id="timestamp-format"> 
-                    Use 24-hour time format
-                </label>
-            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="speakerLabels" checked>
+                <span class="toggle-slider"></span>
+            </label>
         </div>
         
-        <div class="section">
-            <h2>Audio Settings</h2>
-            <div class="option-group">
-                <label>
-                    <input type="checkbox" id="show-levels" checked> 
-                    Show audio level indicator
-                </label>
+        <div class="option-row">
+            <div class="option-label">
+                <h3>24-Hour Time Format</h3>
+                <p>Use 24-hour time instead of 12-hour AM/PM format</p>
             </div>
-            <div class="option-group">
-                <label>
-                    <input type="checkbox" id="debug-mode"> 
-                    Enable debug mode (show technical logs)
-                </label>
-            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="use24Hour">
+                <span class="toggle-slider"></span>
+            </label>
         </div>
-        
-        <div class="section">
-            <h2>Export Options</h2>
-            <button id="exportBtn">Export All Transcripts</button>
-            <button id="clearBtn" style="background: #f44336; margin-left: 10px;">Clear All Data</button>
-        </div>
-        
-        <button id="saveBtn">Save Settings</button>
-        <div id="status" class="status"></div>
+    </div>
+    
+    <div class="save-status" id="saveStatus">
+        ✓ Settings saved
+    </div>
+    
+    <div class="footer">
+        <p>All transcription happens locally. No audio is sent to external servers.</p>
+        <p><a href="https://github.com/yourusername/vtf-transcription" target="_blank">Documentation</a></p>
     </div>
     
     <script src="options.js"></script>
