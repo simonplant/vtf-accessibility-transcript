@@ -3,6 +3,7 @@ console.log('[VTF Inject] Running inject.js with MutationObserver super-hacker m
 
 let __vtfCaptureStream = null;
 let __vtfHookedAudio = null;
+let observer = null;
 
 function tryHookAudioElement(audio) {
     if (!audio || typeof audio !== "object") return;
@@ -28,23 +29,41 @@ function scanAndHook() {
     document.querySelectorAll('audio').forEach(audio => tryHookAudioElement(audio));
 }
 
-// Observe for new audio elements (MutationObserver)
-const observer = new MutationObserver((mutations) => {
-    mutations.forEach(mutation => {
-        mutation.addedNodes.forEach(node => {
-            if (node.tagName === 'AUDIO') {
-                console.log('[VTF Inject] Found new audio:', node);
-                tryHookAudioElement(node);
-            } else if (node.querySelectorAll) {
-                node.querySelectorAll('audio').forEach(audio => {
-                    console.log('[VTF Inject] Found nested audio:', audio);
-                    tryHookAudioElement(audio);
-                });
-            }
+// Setup observer when DOM is ready
+function setupObserver() {
+    if (observer) return; // Already setup
+    
+    // Observe for new audio elements (MutationObserver)
+    observer = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+            mutation.addedNodes.forEach(node => {
+                if (node.tagName === 'AUDIO') {
+                    console.log('[VTF Inject] Found new audio:', node);
+                    tryHookAudioElement(node);
+                } else if (node.querySelectorAll) {
+                    node.querySelectorAll('audio').forEach(audio => {
+                        console.log('[VTF Inject] Found nested audio:', audio);
+                        tryHookAudioElement(audio);
+                    });
+                }
+            });
         });
     });
-});
-observer.observe(document.body, { childList: true, subtree: true });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+    console.log('[VTF Inject] MutationObserver started');
+}
+
+// Wait for DOM to be ready
+function init() {
+    if (document.body) {
+        setupObserver();
+        scanAndHook();
+    } else {
+        // If body doesn't exist yet, wait a bit
+        setTimeout(init, 10);
+    }
+}
 
 // Also try to hook on audio tag changes
 document.addEventListener('play', e => {
@@ -58,5 +77,5 @@ window.addEventListener('VTF_FORCE_REHOOK', () => scanAndHook());
 window.__vtfScanAndHook = scanAndHook;
 window.__vtfObserver = observer;
 
-// Initial run
-setTimeout(scanAndHook, 1000);
+// Start initialization
+init();
