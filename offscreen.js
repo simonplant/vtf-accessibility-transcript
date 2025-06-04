@@ -1,109 +1,116 @@
-// offscreen.js - Handles audio processing and transcription
-console.log('Offscreen document loaded');
+// offscreen.js - Whisper transcription with hardcoded API key
 
-let isReady = false;
-let audioContext = null;
+// offscreen.js - Whisper transcription with hardcoded API key & silence detection
 
-// Create audio context to keep document active
-function createDummyAudio() {
-    if (!audioContext) {
-        audioContext = new AudioContext();
-        const source = audioContext.createConstantSource();
-        source.offset.value = 0; // Silent
-        source.connect(audioContext.destination);
-        source.start();
-        console.log('Offscreen: Created audio context to stay active');
+const WHISPER_ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
+const OPENAI_API_KEY = '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'; // HARD-CODED API KEY (do not commit to source control)
+
+let audioBuffer = [];
+let bufferStart = null;
+const CHUNK_DURATION_MS = 5000;
+const MIN_INTERVAL_MS = 7000;
+let lastSentAt = 0;
+
+// Silence detection: parameters
+const SILENCE_THRESHOLD = 0.015; // Min amplitude to count as 'loud'
+const MIN_LOUD_FRAMES = 128;     // How many samples must be loud to consider 'not silent'
+
+// Utility: check if buffer is mostly silence
+function isMostlySilent(float32Array, threshold = SILENCE_THRESHOLD, minLoud = MIN_LOUD_FRAMES) {
+    let loud = 0;
+    for (let i = 0; i < float32Array.length; i++) {
+        if (Math.abs(float32Array[i]) > threshold) {
+            loud++;
+            if (loud >= minLoud) return false; // It's NOT silent!
+        }
     }
+    return true; // Is mostly silence
 }
 
-// Initialize transcription
-async function initializeTranscription() {
-    try {
-        console.log('Offscreen: Initializing transcription...');
-        createDummyAudio(); // Keep document active
-        
-        // TODO: Replace this section with a working speech recognition library
-        // Requirements:
-        // 1. Must work with Manifest V3 (no eval/unsafe-inline)
-        // 2. Must process Float32Array audio chunks
-        // 3. Must work offline
-        // 4. Suggested libraries to research:
-        //    - Whisper ONNX Web
-        //    - TensorFlow.js with speech model
-        //    - whisper.cpp compiled to WASM
-        //    - Any WASM-based speech recognition
-        
-        // For now, just mark as ready and log audio data
-        isReady = true;
-        console.log('Offscreen: Ready (no transcription library loaded yet)');
-        
-        chrome.runtime.sendMessage({
-            type: 'worker_message',
-            data: { type: 'ready' }
-        });
-        
-    } catch (error) {
-        console.error('Offscreen: Init error:', error);
-        chrome.runtime.sendMessage({
-            type: 'worker_error',
-            error: error.toString()
-        });
-    }
-}
+chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+    if (request.type === 'init_worker') return sendResponse({ status: 'ready' });
+    if (request.type === 'keepalive') return sendResponse({ ok: true });
+    if (request.type !== 'process_audio' || !OPENAI_API_KEY) return;
 
-// Process audio data
-function processAudio(audioData) {
-    if (!isReady) return;
-    
-    // TODO: Process audio with speech recognition library
-    // For now, just log that we received audio
-    
-    // Uncomment to see audio data flow:
-    // console.log('Offscreen: Received audio chunk, length:', audioData.length);
-    
-    // Example of how transcription results should be sent:
-    /*
-    const transcriptionResult = {
-        type: 'transcript',
-        text: 'transcribed text here',
-        isFinal: true,
-        timestamp: Date.now()
-    };
-    
-    chrome.runtime.sendMessage({
-        type: 'worker_message',
-        data: transcriptionResult
-    });
-    */
-}
+    audioBuffer.push(...request.data);
+    if (!bufferStart) bufferStart = Date.now();
 
-// Listen for messages from background
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Keep audio context active
-    if (audioContext && audioContext.state === 'suspended') {
-        audioContext.resume();
+    if (Date.now() - bufferStart >= CHUNK_DURATION_MS && Date.now() - lastSentAt >= MIN_INTERVAL_MS) {
+        // Silence detection step
+        if (isMostlySilent(audioBuffer)) {
+            // Too quiet: skip this chunk
+            audioBuffer = [];
+            bufferStart = null;
+            // Optionally: send a "no speech" event for UI (optional)
+            chrome.runtime.sendMessage({
+                type: 'worker_message',
+                data: { type: 'transcript', text: '[silence]', isFinal: true }
+            });
+            return;
+        }
+
+        const blob = encodeWAV(audioBuffer);
+        audioBuffer = [];
+        bufferStart = null;
+        lastSentAt = Date.now();
+
+        try {
+            const transcript = await sendToWhisper(blob);
+            chrome.runtime.sendMessage({
+                type: 'worker_message',
+                data: { type: 'transcript', text: transcript, isFinal: true }
+            });
+        } catch (err) {
+            chrome.runtime.sendMessage({
+                type: 'worker_message',
+                data: { type: 'error', error: err.message || 'Whisper failed' }
+            });
+        }
     }
-    
-    switch (request.type) {
-        case 'init_worker':
-            if (!isReady) {
-                initializeTranscription();
-            }
-            break;
-            
-        case 'process_audio':
-            if (isReady) {
-                processAudio(new Float32Array(request.data));
-            }
-            break;
-            
-        case 'keepalive':
-            sendResponse({ alive: true });
-            break;
-    }
-    
-    return false;
 });
 
-// Initialize immediately
-initializeTranscription();
+function encodeWAV(float32Array) {
+    const sampleRate = 16000;
+    const buffer = new ArrayBuffer(44 + float32Array.length * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (offset, str) => str.split('').forEach((s, i) => view.setUint8(offset + i, s.charCodeAt(0)));
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + float32Array.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, float32Array.length * 2, true);
+
+    for (let i = 0; i < float32Array.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Array[i]));
+        view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+}
+
+async function sendToWhisper(blob) {
+    const form = new FormData();
+    form.append('file', blob, 'chunk.wav');
+    form.append('model', 'whisper-1');
+    form.append('language', 'en');
+
+    const res = await fetch(WHISPER_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+        body: form
+    });
+
+    if (!res.ok) throw new Error(await res.text());
+    const json = await res.json();
+    return json.text;
+}

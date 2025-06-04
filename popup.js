@@ -277,5 +277,5 @@ document.getElementById('helpLink').addEventListener('click', (e) => {
 
 document.getElementById('aboutLink').addEventListener('click', (e) => {
     e.preventDefault();
-    alert('VTF Audio Transcription Extension v1.0\n\nCaptures and transcribes audio from the VTF trading floor using local Vosk speech recognition.');
+    alert('VTF Audio Transcription Extension v1.0\n\nCaptures and transcribes audio from the VTF trading floor using OpenAI Whisper API.');
 });

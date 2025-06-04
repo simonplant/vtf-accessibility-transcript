@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "description": "Captures and transcribes audio from the VTF trading floor",
   
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  
   "permissions": [
     "activeTab",
     "storage",
@@ -35,7 +39,7 @@
         "inject.js",
         "offscreen.html",
         "offscreen.js",
-        "test-audio.js"
+        "audio-processor.js"
       ],
       "matches": ["https://vtf.t3live.com/*"]
     }

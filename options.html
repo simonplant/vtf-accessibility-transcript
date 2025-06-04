@@ -213,6 +213,20 @@
                 <span class="toggle-slider"></span>
             </label>
         </div>
+        <div class="option-row">
+            <div class="option-label">
+                <h3>OpenAI Whisper API Key</h3>
+                <p>Used for audio transcription (stored only on your browser)</p>
+            </div>
+        </div>
+        <div class="option-row" style="flex-direction: column; align-items: stretch;">
+            <input
+                type="password"
+                id="apiKeyInput"
+                placeholder="sk-..."
+                style="width: 100%; padding: 8px; font-size: 14px;"
+            />
+        </div>
     </div>
     
     <div class="save-status" id="saveStatus">
@@ -220,8 +234,8 @@
     </div>
     
     <div class="footer">
-        <p>All transcription happens locally. No audio is sent to external servers.</p>
-        <p><a href="https://github.com/yourusername/vtf-transcription" target="_blank">Documentation</a></p>
+        <p>Audio transcription powered by OpenAI Whisper API.</p>
+        <p><a href="https://github.com/simonplant/vtf-accessibility-transcript" target="_blank">Documentation</a></p>
     </div>
     
     <script src="options.js"></script>
