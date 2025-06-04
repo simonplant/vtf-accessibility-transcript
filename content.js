@@ -1,115 +1,74 @@
-// Inject the audio capture script into the page
+// content.js - Content script that bridges page context and extension
+console.log('[VTF Content] Loading...');
+
+let isTranscribing = false;
+let hasAudioStream = false;
+
+// Inject the capture script
 const script = document.createElement('script');
 script.src = chrome.runtime.getURL('inject.js');
-script.onload = function() { this.remove(); };
+script.onload = function() {
+  this.remove();
+  console.log('[VTF Content] Inject script loaded');
+};
 (document.head || document.documentElement).appendChild(script);
 
-// content.js – VTF Transcription Content Script (robust MV3, MutationObserver compatible)
-console.log('[VTF Transcription] Content script loaded');
-
-// Extension state
-let isTranscribing = false;
-let audioContext = null;
-let sourceNode = null;
-let audioProcessor = null;
-let silenceCheckInterval = null;
-let audioBuffer = [];
-const BUFFER_SIZE = 16000 * 5; // 5 seconds at 16kHz
-
-// Service Worker safe sendMessage (with auto-retry)
-function sendToBackground(payload, retries = 3) {
-    chrome.runtime.sendMessage(payload, (response) => {
-        if (chrome.runtime.lastError) {
-            if (
-                chrome.runtime.lastError.message &&
-                chrome.runtime.lastError.message.includes('Extension context invalidated') &&
-                retries > 0
-            ) {
-                setTimeout(() => sendToBackground(payload, retries - 1), 400);
-            } else {
-                console.error('[VTF Transcription] sendMessage failed:', chrome.runtime.lastError);
-            }
-        }
-    });
-}
-
-// Listen for stream hooks from inject.js
-window.addEventListener('message', async (event) => {
-    if (event.data && event.data.type === 'VTF_STREAM_HOOKED') {
-        console.log('[VTF Transcription] Notified: stream hooked!');
-        setTimeout(setupAudioProcessing, 200);
-    }
+// Listen for messages from injected script
+window.addEventListener('message', (event) => {
+  if (event.source !== window) return;
+  
+  switch (event.data.type) {
+    case 'VTF_STREAM_CAPTURED':
+      hasAudioStream = true;
+      chrome.runtime.sendMessage({
+        type: 'stream_status',
+        hasAudio: true
+      });
+      break;
+      
+    case 'VTF_AUDIO_DATA':
+      if (isTranscribing) {
+        // Forward audio data to background
+        chrome.runtime.sendMessage({
+          type: 'audio_chunk',
+          audioData: event.data.audioData,
+          sampleRate: event.data.sampleRate,
+          timestamp: event.data.timestamp
+        });
+      }
+      break;
+  }
 });
 
-// Setup audio capture pipeline
-async function setupAudioProcessing() {
-    try {
-        // Cleanup any old context/processors
-        if (audioContext) {
-            try { audioContext.close(); } catch (e) {}
-        }
-        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-
-        // Try to get the injected stream
-        const injectedStream = window.__vtfCaptureStream;
-        if (!injectedStream) {
-            console.warn('[VTF Transcription] No injected stream available, waiting...');
-            return;
-        }
-
-        // Setup nodes
-        if (sourceNode) try { sourceNode.disconnect(); } catch (e) {}
-        if (audioProcessor) try { audioProcessor.disconnect(); } catch (e) {}
-
-        sourceNode = audioContext.createMediaStreamSource(injectedStream);
-
-        // ScriptProcessorNode (still needed for browser compat—AudioWorklet is better if supported!)
-        audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-
-        audioProcessor.onaudioprocess = (e) => {
-            if (!isTranscribing) return;
-            const input = e.inputBuffer.getChannelData(0);
-            audioBuffer.push(...input);
-
-            // Send every 5 seconds
-            if (audioBuffer.length >= BUFFER_SIZE) {
-                sendToBackground({ 
-                    type: 'audio_data', 
-                    data: audioBuffer.slice(0, BUFFER_SIZE)
-                });
-                audioBuffer = audioBuffer.slice(BUFFER_SIZE);
-            }
-        };
-
-        sourceNode.connect(audioProcessor);
-        audioProcessor.connect(audioContext.destination);
-
-        console.log('[VTF Transcription] Audio pipeline ready!');
-
-        // Start transcribing immediately for this stream
-        isTranscribing = true;
-    } catch (e) {
-        console.error('[VTF Transcription] setupAudioProcessing failed:', e);
-        sendToBackground({ type: 'transcription_error', error: String(e) });
-    }
-}
-
-// Chrome messages for control (popup/worker)
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === 'start_transcription') {
-        isTranscribing = true;
-        setupAudioProcessing();
-        sendResponse({ started: true });
-    }
-    if (msg.type === 'stop_transcription') {
-        isTranscribing = false;
-        if (audioProcessor) try { audioProcessor.disconnect(); } catch (e) {}
-        if (sourceNode) try { sourceNode.disconnect(); } catch (e) {}
-        if (audioContext) try { audioContext.close(); } catch (e) {}
-        sendResponse({ stopped: true });
-    }
-    return true;
+// Listen for control messages from extension
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  switch (message.type) {
+    case 'start_transcription':
+      isTranscribing = true;
+      window.postMessage({ type: 'VTF_START_CAPTURE' }, '*');
+      sendResponse({ success: true, hasAudioStream });
+      break;
+      
+    case 'stop_transcription':
+      isTranscribing = false;
+      window.postMessage({ type: 'VTF_STOP_CAPTURE' }, '*');
+      sendResponse({ success: true });
+      break;
+      
+    case 'get_status':
+      sendResponse({ isTranscribing, hasAudioStream });
+      break;
+  }
+  return true;
 });
 
-// Expose (for debug)
-window.__vtfRestart = setupAudioProcessing;
+// Auto-start if configured
+chrome.storage.local.get(['autoStart'], (result) => {
+  if (result.autoStart) {
+    console.log('[VTF Content] Auto-starting transcription...');
+    setTimeout(() => {
+      isTranscribing = true;
+      window.postMessage({ type: 'VTF_START_CAPTURE' }, '*');
+    }, 3000);
+  }
+});
