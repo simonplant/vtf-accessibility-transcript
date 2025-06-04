@@ -10,7 +10,7 @@
     <div class="header">
         <h1>VTF Transcription Options</h1>
     </div>
-    
+
     <div class="option-group">
         <div class="option-row">
             <div class="option-label">
@@ -22,7 +22,6 @@
                 <span class="toggle-slider"></span>
             </label>
         </div>
-        
         <div class="option-row">
             <div class="option-label">
                 <h3>Auto-Start</h3>
@@ -33,7 +32,6 @@
                 <span class="toggle-slider"></span>
             </label>
         </div>
-        
         <div class="option-row">
             <div class="option-label">
                 <h3>Speaker Labels</h3>
@@ -44,7 +42,6 @@
                 <span class="toggle-slider"></span>
             </label>
         </div>
-        
         <div class="option-row">
             <div class="option-label">
                 <h3>24-Hour Time Format</h3>
@@ -57,8 +54,18 @@
         </div>
         <div class="option-row">
             <div class="option-label">
+                <h3>Debug Mode</h3>
+                <p>Enable extra debug logging and diagnostics</p>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="debugMode">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="option-row">
+            <div class="option-label">
                 <h3>OpenAI Whisper API Key</h3>
-                <p>Used for audio transcription (stored only on your browser)</p>
+                <p>Used for audio transcription (stored only in your browser)</p>
             </div>
         </div>
         <div class="option-row" style="flex-direction: column; align-items: stretch;">
@@ -70,16 +77,16 @@
             />
         </div>
     </div>
-    
+
     <div class="save-status" id="saveStatus">
         ✓ Settings saved
     </div>
-    
+
     <div class="footer">
         <p>Audio transcription powered by OpenAI Whisper API.</p>
         <p><a href="https://github.com/simonplant/vtf-accessibility-transcript" target="_blank">Documentation</a></p>
     </div>
-    
+
     <script src="options.js"></script>
 </body>
 </html>

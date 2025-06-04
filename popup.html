@@ -1,16 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>VTF Transcription</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTF Transcript</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h2>Live Transcript</h2>
-  <div id="transcript">(nothing yet)</div>
-  <button id="startBtn">Start</button>
-  <button id="stopBtn">Stop</button>
-  <button id="refreshBtn">Refresh</button>
-  <div id="debug"></div>
-  <script src="popup.js"></script>
+    <div class="header">
+        <h1>VTF Transcript</h1>
+    </div>
+    <div class="popup-controls">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <button id="clearBtn">Clear</button>
+        <label style="float:right">
+            <input type="checkbox" id="debugPopup">
+            Debug
+        </label>
+    </div>
+    <div class="transcript-box">
+        <pre id="transcript" style="white-space:pre-wrap;word-break:break-word;"></pre>
+    </div>
+    <div class="footer">
+        <p>Audio transcription powered by OpenAI Whisper API.</p>
+    </div>
+    <script src="popup.js"></script>
 </body>
 </html>

@@ -1,48 +1,54 @@
-// options.js - Handle settings + API key
+// options.js – UI logic for VTF Options page
 
-const saveTranscriptsToggle = document.getElementById('saveTranscripts');
-const autoStartToggle = document.getElementById('autoStart');
-const speakerLabelsToggle = document.getElementById('speakerLabels');
-const use24HourToggle = document.getElementById('use24Hour');
-const apiKeyInput = document.getElementById('apiKeyInput');
-const saveStatus = document.getElementById('saveStatus');
+// Set of option keys and their default values
+const optionDefaults = {
+    saveTranscripts: true,
+    autoStart: true,
+    speakerLabels: true,
+    use24Hour: false,
+    debugMode: false,
+    apiKey: ""
+};
 
-chrome.storage.local.get(['settings', 'openai_api_key'], (result) => {
-    if (result.settings) {
-        saveTranscriptsToggle.checked = result.settings.saveTranscripts !== false;
-        autoStartToggle.checked = result.settings.autoStart !== false;
-        speakerLabelsToggle.checked = result.settings.speakerLabels !== false;
-        use24HourToggle.checked = result.settings.timestampFormat === '24h';
-    } else {
-        saveTranscriptsToggle.checked = true;
-        autoStartToggle.checked = true;
-        speakerLabelsToggle.checked = true;
-        use24HourToggle.checked = false;
-    }
-    if (result.openai_api_key) {
-        apiKeyInput.value = result.openai_api_key;
-    }
-});
+function $(id) { return document.getElementById(id); }
 
-function saveSettings() {
-    const settings = {
-        saveTranscripts: saveTranscriptsToggle.checked,
-        autoStart: autoStartToggle.checked,
-        speakerLabels: speakerLabelsToggle.checked,
-        timestampFormat: use24HourToggle.checked ? '24h' : '12h'
-    };
-
-    const apiKey = apiKeyInput.value.trim();
-
-    chrome.storage.local.set({ settings, openai_api_key: apiKey }, () => {
-        chrome.runtime.sendMessage({ type: 'update_settings', settings });
-        saveStatus.classList.add('show');
-        setTimeout(() => saveStatus.classList.remove('show'), 2000);
+function loadOptions() {
+    chrome.storage.local.get(optionDefaults, (opts) => {
+        $("saveTranscripts").checked = opts.saveTranscripts;
+        $("autoStart").checked = opts.autoStart;
+        $("speakerLabels").checked = opts.speakerLabels;
+        $("use24Hour").checked = opts.use24Hour;
+        $("debugMode").checked = opts.debugMode;
+        $("apiKeyInput").value = opts.apiKey || "";
     });
 }
 
-saveTranscriptsToggle.addEventListener('change', saveSettings);
-autoStartToggle.addEventListener('change', saveSettings);
-speakerLabelsToggle.addEventListener('change', saveSettings);
-use24HourToggle.addEventListener('change', saveSettings);
-apiKeyInput.addEventListener('input', saveSettings);
+function saveOptions() {
+    const newOpts = {
+        saveTranscripts: $("saveTranscripts").checked,
+        autoStart: $("autoStart").checked,
+        speakerLabels: $("speakerLabels").checked,
+        use24Hour: $("use24Hour").checked,
+        debugMode: $("debugMode").checked,
+        apiKey: $("apiKeyInput").value
+    };
+    chrome.storage.local.set(newOpts, () => {
+        const status = $("saveStatus");
+        status.classList.add("show");
+        setTimeout(() => status.classList.remove("show"), 1200);
+    });
+}
+
+// Set up listeners
+document.addEventListener("DOMContentLoaded", () => {
+    loadOptions();
+    for (const id of [
+        "saveTranscripts", "autoStart", "speakerLabels",
+        "use24Hour", "debugMode", "apiKeyInput"
+    ]) {
+        $(id).addEventListener("change", saveOptions);
+        if (id === "apiKeyInput") {
+            $(id).addEventListener("input", saveOptions);
+        }
+    }
+});
