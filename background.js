@@ -6,7 +6,7 @@ function log(...args) { if (DEBUG) console.log('[VTF BG]', ...args); }
 let apiKey = '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';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'audio_chunk') {
+    if (message.type === 'audio_data') {
         log('Received audio chunk, length:', message.data.length);
         // Convert Float32Array to Int16 WAV
         const wavBuffer = floatToWav(message.data, 16000);
@@ -29,6 +29,12 @@ async function transcribeWithWhisper(wavBuffer) {
         const json = await res.json();
         log('Whisper result:', json);
         // TODO: Relay transcript to content/popup as needed
+        // After successful transcription, send transcript to popup
+        chrome.runtime.sendMessage({
+            type: 'transcript_chunk',
+            text: json.text, // replace with your actual transcript variable
+            timestamp: new Date().toISOString()
+        });
     } catch (err) {
         log('Whisper failed:', err);
     }

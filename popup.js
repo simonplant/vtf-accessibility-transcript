@@ -56,10 +56,9 @@ chrome.storage.local.get("debugMode", data => {
 });
 
 // Listen for new transcript chunks from background
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === "transcript_chunk" && msg.text) {
-        appendTranscript(msg.text);
-        saveTranscript($("transcript").textContent);
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'transcript_chunk') {
+        document.getElementById('transcript').textContent += `\n${message.text}`;
     }
 });
 

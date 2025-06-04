@@ -1,3 +1,9 @@
+// Inject the audio capture script into the page
+const script = document.createElement('script');
+script.src = chrome.runtime.getURL('inject.js');
+script.onload = function() { this.remove(); };
+(document.head || document.documentElement).appendChild(script);
+
 // content.js – VTF Transcription Content Script (robust MV3, MutationObserver compatible)
 console.log('[VTF Transcription] Content script loaded');
 
@@ -7,6 +13,8 @@ let audioContext = null;
 let sourceNode = null;
 let audioProcessor = null;
 let silenceCheckInterval = null;
+let audioBuffer = [];
+const BUFFER_SIZE = 16000 * 5; // 5 seconds at 16kHz
 
 // Service Worker safe sendMessage (with auto-retry)
 function sendToBackground(payload, retries = 3) {
@@ -58,41 +66,18 @@ async function setupAudioProcessing() {
         // ScriptProcessorNode (still needed for browser compat—AudioWorklet is better if supported!)
         audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
 
-        let silenceBuffer = [];
-        const SILENCE_THRESHOLD = 0.008;
-        const SILENCE_FRAMES = 30; // About 0.8s at 4096/16kHz
-
         audioProcessor.onaudioprocess = (e) => {
             if (!isTranscribing) return;
             const input = e.inputBuffer.getChannelData(0);
+            audioBuffer.push(...input);
 
-            // Simple silence detection
-            let hasSignal = false;
-            for (let i = 0; i < input.length; i++) {
-                if (Math.abs(input[i]) > SILENCE_THRESHOLD) {
-                    hasSignal = true;
-                    break;
-                }
-            }
-            if (hasSignal) {
-                // Buffer some audio before/after to avoid clipping speech
-                if (silenceBuffer.length) {
-                    const concat = new Float32Array(silenceBuffer.length * input.length + input.length);
-                    let offset = 0;
-                    silenceBuffer.forEach(chunk => {
-                        concat.set(chunk, offset);
-                        offset += chunk.length;
-                    });
-                    concat.set(input, offset);
-                    silenceBuffer = [];
-                    sendToBackground({ type: 'audio_data', data: Array.from(concat) });
-                } else {
-                    sendToBackground({ type: 'audio_data', data: Array.from(input) });
-                }
-            } else {
-                // Buffer frames of silence to prepend if next chunk is speech
-                if (silenceBuffer.length >= SILENCE_FRAMES) silenceBuffer.shift();
-                silenceBuffer.push(new Float32Array(input));
+            // Send every 5 seconds
+            if (audioBuffer.length >= BUFFER_SIZE) {
+                sendToBackground({ 
+                    type: 'audio_data', 
+                    data: audioBuffer.slice(0, BUFFER_SIZE)
+                });
+                audioBuffer = audioBuffer.slice(BUFFER_SIZE);
             }
         };
 
