@@ -7,23 +7,30 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="header">
-        <h1>VTF Transcript</h1>
+    <div class="header">VTF Transcript</div>
+    <div class="status-row">
+        <div id="statusIndicator" class="status-indicator"></div>
+        <div id="statusText" class="info-value">Not Recording</div>
+    </div>
+    <div class="info-row">
+        <div><span class="info-label">Audio Sources:</span> <span id="audioSources" class="info-value">None detected</span></div>
+        <div><span class="info-label">Lines:</span> <span id="lineCount" class="info-value">0</span></div>
     </div>
     <div class="popup-controls">
-        <button id="startBtn">Start</button>
-        <button id="stopBtn" disabled>Stop</button>
+        <button id="toggleBtn">Start Transcription</button>
         <button id="clearBtn">Clear</button>
-        <label style="float:right">
-            <input type="checkbox" id="debugPopup">
-            Debug
-        </label>
+        <div class="right">
+            <button id="exportBtn" title="Export transcript">Export</button>
+            <button id="settingsBtn" title="Settings">⚙️</button>
+        </div>
     </div>
-    <div class="transcript-box">
-        <pre id="transcript" style="white-space:pre-wrap;word-break:break-word;"></pre>
+    <div class="error-message hidden" id="errorMessage"></div>
+    <div class="transcript-box" id="transcriptContent">
+        <div class="empty-state">Click "Start Transcription" to begin capturing audio from the VTF trading floor.</div>
     </div>
     <div class="footer">
-        <p>Audio transcription powered by OpenAI Whisper API.</p>
+        Audio transcription powered by OpenAI Whisper API.<br>
+        <span style="font-size:10px;">UI by T3Live</span>
     </div>
     <script src="popup.js"></script>
 </body>
