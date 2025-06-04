@@ -1,138 +1,204 @@
-// background.js - Handles audio chunks and OpenAI Whisper transcription
+// background.js - Production service worker with queue management
+console.log('[VTF Background] Starting production service worker v3.0');
 
-let apiKey = null;
-let audioBuffers = new Map(); // Store audio buffers per tab
-let transcriptionQueue = [];
-let isProcessing = false;
+// State management
+const state = {
+  apiKey: null,
+  transcriptionQueue: [],
+  isProcessing: false,
+  stats: {
+    transcriptionsCompleted: 0,
+    transcriptionsFailed: 0,
+    totalProcessingTime: 0
+  }
+};
 
 // Initialize
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[VTF] Extension installed');
+  console.log('[VTF Background] Extension installed/updated');
+  
+  // Set default options
+  chrome.storage.local.get(['bufferSeconds', 'autoStart'], (result) => {
+    const defaults = {
+      bufferSeconds: result.bufferSeconds || 5,
+      autoStart: result.autoStart !== undefined ? result.autoStart : false
+    };
+    chrome.storage.local.set(defaults);
+  });
 });
 
-// Load API key on startup
-chrome.storage.local.get(['apiKey'], (result) => {
-  apiKey = result.apiKey;
-});
+// Load API key
+async function loadApiKey() {
+  const result = await chrome.storage.local.get(['apiKey']);
+  state.apiKey = result.apiKey;
+  
+  if (!state.apiKey) {
+    console.warn('[VTF Background] No API key configured');
+  } else {
+    console.log('[VTF Background] API key loaded');
+  }
+  
+  return !!state.apiKey;
+}
 
-// Listen for API key updates
+// Initial load
+loadApiKey();
+
+// Monitor storage changes
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'local' && changes.apiKey) {
-    apiKey = changes.apiKey.newValue;
+    state.apiKey = changes.apiKey.newValue;
+    console.log('[VTF Background] API key updated');
+    
+    // Process any queued items if we now have a key
+    if (state.apiKey && state.transcriptionQueue.length > 0) {
+      processQueue();
+    }
   }
 });
 
 // Message handler
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.type) {
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  switch (request.type) {
     case 'audio_chunk':
-      handleAudioChunk(message, sender.tab.id);
+      handleAudioChunk(request, sender.tab?.id);
       break;
-    case 'get_api_key':
-      sendResponse({ apiKey });
-      break;
-    case 'transcription_status':
-      sendResponse({ isProcessing });
+      
+    case 'get_api_status':
+      sendResponse({ 
+        hasApiKey: !!state.apiKey,
+        queueLength: state.transcriptionQueue.length,
+        stats: state.stats
+      });
       break;
   }
   return true;
 });
 
-function handleAudioChunk(message, tabId) {
-  const { audioData, sampleRate, timestamp } = message;
-  
-  // Initialize buffer for this tab if needed
-  if (!audioBuffers.has(tabId)) {
-    audioBuffers.set(tabId, {
-      data: [],
-      sampleRate: sampleRate,
-      lastTimestamp: timestamp
-    });
-  }
-  
-  const buffer = audioBuffers.get(tabId);
-  buffer.data.push(...audioData);
-  
-  // Process every 5 seconds of audio (5 * sampleRate samples)
-  const chunkSize = 5 * sampleRate;
-  if (buffer.data.length >= chunkSize) {
-    const chunk = buffer.data.splice(0, chunkSize);
-    queueTranscription(tabId, chunk, sampleRate, timestamp);
-  }
-}
-
-function queueTranscription(tabId, audioData, sampleRate, timestamp) {
-  transcriptionQueue.push({
-    tabId,
-    audioData,
-    sampleRate,
-    timestamp
-  });
-  
-  processQueue();
-}
-
-async function processQueue() {
-  if (isProcessing || transcriptionQueue.length === 0 || !apiKey) return;
-  
-  isProcessing = true;
-  const item = transcriptionQueue.shift();
-  
-  try {
-    const wavBlob = createWavBlob(item.audioData, item.sampleRate);
-    const transcript = await transcribeAudio(wavBlob);
+// Handle incoming audio chunks
+function handleAudioChunk(request, tabId) {
+  if (!state.apiKey) {
+    console.warn('[VTF Background] Skipping transcription - no API key');
     
-    if (transcript) {
-      // Send to popup
-      chrome.runtime.sendMessage({
-        type: 'transcript_update',
-        tabId: item.tabId,
-        text: transcript,
-        timestamp: item.timestamp
-      }).catch(() => {
-        // Popup might be closed
-      });
-      
-      // Save to storage
-      saveTranscript(item.tabId, transcript, item.timestamp);
-    }
-  } catch (error) {
-    console.error('[VTF] Transcription error:', error);
+    // Notify popup
     chrome.runtime.sendMessage({
       type: 'transcription_error',
-      error: error.message
+      error: 'No API key configured',
+      timestamp: Date.now()
     }).catch(() => {});
+    
+    return;
   }
   
-  isProcessing = false;
-  // Process next item
-  setTimeout(processQueue, 100);
-}
-
-async function transcribeAudio(wavBlob) {
-  const formData = new FormData();
-  formData.append('file', wavBlob, 'audio.wav');
-  formData.append('model', 'whisper-1');
-  formData.append('language', 'en');
-  formData.append('response_format', 'text');
-  
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: formData
+  // Queue for processing
+  state.transcriptionQueue.push({
+    audioData: request.audioData,
+    sampleRate: request.sampleRate,
+    timestamp: request.timestamp,
+    tabId: tabId,
+    queuedAt: Date.now()
   });
   
-  if (!response.ok) {
-    throw new Error(`Whisper API error: ${response.status}`);
-  }
+  console.log(`[VTF Background] Queued audio chunk, queue length: ${state.transcriptionQueue.length}`);
   
-  return await response.text();
+  // Start processing if not already running
+  if (!state.isProcessing) {
+    processQueue();
+  }
 }
 
-function createWavBlob(float32Array, sampleRate) {
-  const length = float32Array.length;
+// Process transcription queue
+async function processQueue() {
+  if (state.isProcessing || state.transcriptionQueue.length === 0 || !state.apiKey) {
+    return;
+  }
+  
+  state.isProcessing = true;
+  
+  while (state.transcriptionQueue.length > 0 && state.apiKey) {
+    const item = state.transcriptionQueue.shift();
+    const startTime = Date.now();
+    
+    try {
+      // Create WAV blob
+      const wavBlob = createWavBlob(item.audioData, item.sampleRate);
+      
+      // Call Whisper API
+      const formData = new FormData();
+      formData.append('file', wavBlob, 'audio.wav');
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'en');
+      formData.append('response_format', 'json');
+      formData.append('temperature', '0.2');
+      
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${state.apiKey}`
+        },
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Whisper API error: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      const processingTime = Date.now() - startTime;
+      
+      if (result.text && result.text.trim()) {
+        console.log(`[VTF Background] Transcription completed in ${processingTime}ms:`, result.text);
+        
+        // Update stats
+        state.stats.transcriptionsCompleted++;
+        state.stats.totalProcessingTime += processingTime;
+        
+        // Send to popup
+        chrome.runtime.sendMessage({
+          type: 'transcript_update',
+          text: result.text.trim(),
+          timestamp: item.timestamp,
+          tabId: item.tabId,
+          processingTime: processingTime,
+          queueDelay: startTime - item.queuedAt
+        }).catch(() => {});
+        
+        // Save to storage
+        await saveTranscript(item.tabId, result.text.trim(), item.timestamp);
+      }
+      
+    } catch (error) {
+      console.error('[VTF Background] Transcription error:', error);
+      state.stats.transcriptionsFailed++;
+      
+      // Notify popup
+      chrome.runtime.sendMessage({
+        type: 'transcription_error',
+        error: error.message,
+        timestamp: Date.now()
+      }).catch(() => {});
+      
+      // Rate limit handling
+      if (error.message.includes('429')) {
+        console.log('[VTF Background] Rate limited, waiting 10 seconds');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+      }
+    }
+    
+    // Small delay between requests
+    if (state.transcriptionQueue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  state.isProcessing = false;
+  console.log('[VTF Background] Queue processing completed');
+}
+
+// Create WAV blob from audio data
+function createWavBlob(audioData, sampleRate) {
+  const length = audioData.length;
   const arrayBuffer = new ArrayBuffer(44 + length * 2);
   const view = new DataView(arrayBuffer);
   
@@ -160,27 +226,57 @@ function createWavBlob(float32Array, sampleRate) {
   // Convert float32 to int16
   let offset = 44;
   for (let i = 0; i < length; i++, offset += 2) {
-    const s = Math.max(-1, Math.min(1, float32Array[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    const sample = Math.max(-1, Math.min(1, audioData[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
   }
   
   return new Blob([arrayBuffer], { type: 'audio/wav' });
 }
 
+// Save transcript to storage
 async function saveTranscript(tabId, text, timestamp) {
   const key = `transcript_${tabId}`;
-  const { [key]: existing = [] } = await chrome.storage.local.get(key);
+  const result = await chrome.storage.local.get(key);
+  const transcripts = result[key] || [];
   
-  existing.push({
-    text,
-    timestamp,
+  transcripts.push({
+    text: text,
+    timestamp: timestamp,
     date: new Date().toISOString()
   });
   
-  // Keep last 1000 entries
-  if (existing.length > 1000) {
-    existing.splice(0, existing.length - 1000);
+  // Keep last 10000 entries (full trading day)
+  if (transcripts.length > 10000) {
+    transcripts.splice(0, transcripts.length - 10000);
   }
   
-  await chrome.storage.local.set({ [key]: existing });
+  await chrome.storage.local.set({ [key]: transcripts });
 }
+
+// Export functionality
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'export_transcripts') {
+    exportTranscripts(request.tabId).then(sendResponse);
+    return true;
+  }
+});
+
+async function exportTranscripts(tabId) {
+  const key = `transcript_${tabId}`;
+  const result = await chrome.storage.local.get(key);
+  const transcripts = result[key] || [];
+  
+  let content = 'VTF Trading Floor Transcript\n';
+  content += `Exported: ${new Date().toLocaleString()}\n`;
+  content += `Total entries: ${transcripts.length}\n`;
+  content += '='.repeat(50) + '\n\n';
+  
+  transcripts.forEach(entry => {
+    const time = new Date(entry.date).toLocaleTimeString();
+    content += `[${time}] ${entry.text}\n\n`;
+  });
+  
+  return content;
+}
+
+console.log('[VTF Background] Production service worker ready');

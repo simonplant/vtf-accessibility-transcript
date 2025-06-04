@@ -1,9 +1,8 @@
-// popup.js - Popup UI controller
-
+// popup.js - Production UI with real-time status
 const $ = id => document.getElementById(id);
 
-let isTranscribing = false;
 let currentTabId = null;
+let statusUpdateInterval = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -11,107 +10,49 @@ document.addEventListener('DOMContentLoaded', async () => {
   currentTabId = tab.id;
   
   // Check if on VTF site
-  if (!tab.url.includes('vtf.t3live.com')) {
+  if (!tab.url || !tab.url.includes('vtf.t3live.com')) {
     showError('Please navigate to VTF trading floor first');
     $('toggleBtn').disabled = true;
     return;
   }
   
-  // Get current status
-  chrome.tabs.sendMessage(tab.id, { type: 'get_status' }, (response) => {
-    if (chrome.runtime.lastError) {
-      showError('Unable to connect to VTF page. Please refresh.');
-      return;
-    }
-    
-    if (response) {
-      updateStatus(response.isTranscribing);
-      updateAudioStatus(response.hasAudioStream);
-    }
-  });
-  
-  // Load saved transcripts
-  loadTranscripts();
-  
   // Check API key
-  chrome.storage.local.get(['apiKey'], (result) => {
-    if (!result.apiKey) {
-      showError('Please set your OpenAI API key in settings');
-    }
-  });
+  const apiStatus = await chrome.runtime.sendMessage({ type: 'get_api_status' });
+  if (!apiStatus.hasApiKey) {
+    showError('Please set your OpenAI API key in settings');
+  }
+  
+  // Get initial status
+  getStatus();
+  
+  // Start status updates
+  statusUpdateInterval = setInterval(getStatus, 2000);
+  
+  // Load transcripts
+  loadTranscripts();
 });
 
-// Button handlers
-$('toggleBtn').onclick = async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
-  if (isTranscribing) {
-    chrome.tabs.sendMessage(tab.id, { type: 'stop_transcription' }, (response) => {
-      if (response && response.success) {
-        updateStatus(false);
-      }
-    });
-  } else {
-    chrome.tabs.sendMessage(tab.id, { type: 'start_transcription' }, (response) => {
-      if (response && response.success) {
-        updateStatus(true);
-        if (!response.hasAudioStream) {
-          showError('No audio stream detected. Waiting for audio...');
-        }
-      }
-    });
+// Get current status
+async function getStatus() {
+  try {
+    const response = await chrome.tabs.sendMessage(currentTabId, { type: 'get_status' });
+    
+    if (response) {
+      updateUI(response.isTranscribing);
+      updateStats(response.stats);
+    }
+  } catch (error) {
+    console.error('Failed to get status:', error);
   }
-};
+}
 
-$('clearBtn').onclick = () => {
-  if (confirm('Clear all transcripts?')) {
-    $('transcriptContent').innerHTML = '<div class="empty-state">No transcripts yet</div>';
-    chrome.storage.local.remove(`transcript_${currentTabId}`);
-    updateLineCount(0);
-  }
-};
-
-$('exportBtn').onclick = async () => {
-  const key = `transcript_${currentTabId}`;
-  const { [key]: transcripts = [] } = await chrome.storage.local.get(key);
-  
-  if (transcripts.length === 0) {
-    showError('No transcripts to export');
-    return;
-  }
-  
-  let content = 'VTF Trading Floor Transcript\n';
-  content += `Exported: ${new Date().toLocaleString()}\n`;
-  content += '=' .repeat(50) + '\n\n';
-  
-  transcripts.forEach(entry => {
-    const time = new Date(entry.date).toLocaleTimeString();
-    content += `[${time}] ${entry.text}\n\n`;
-  });
-  
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const filename = `vtf-transcript-${new Date().toISOString().split('T')[0]}.txt`;
-  
-  chrome.downloads.download({
-    url: url,
-    filename: filename,
-    saveAs: true
-  });
-};
-
-$('settingsBtn').onclick = () => {
-  chrome.runtime.openOptionsPage();
-};
-
-// UI update functions
-function updateStatus(active) {
-  isTranscribing = active;
+// Update UI based on transcription state
+function updateUI(isTranscribing) {
   const indicator = $('statusIndicator');
   const statusText = $('statusText');
   const toggleBtn = $('toggleBtn');
   
-  if (active) {
+  if (isTranscribing) {
     indicator.classList.add('active');
     statusText.textContent = 'Recording';
     statusText.className = 'info-value danger';
@@ -126,21 +67,76 @@ function updateStatus(active) {
   }
 }
 
-function updateAudioStatus(hasAudio) {
-  const audioStatus = $('audioSources');
-  if (hasAudio) {
-    audioStatus.textContent = 'Audio stream detected';
-    audioStatus.className = 'info-value success';
-  } else {
-    audioStatus.textContent = 'No audio detected';
-    audioStatus.className = 'info-value danger';
+// Update statistics
+function updateStats(stats) {
+  if (!stats) return;
+  
+  $('chunksReceived').textContent = stats.chunksReceived || 0;
+  $('chunksSent').textContent = stats.chunksSent || 0;
+  $('errors').textContent = stats.errors || 0;
+  
+  if (stats.lastActivity) {
+    const secondsAgo = Math.floor((Date.now() - stats.lastActivity) / 1000);
+    $('lastActivity').textContent = `${secondsAgo}s ago`;
   }
 }
 
-function updateLineCount(count) {
-  $('lineCount').textContent = count;
-}
+// Button handlers
+$('toggleBtn').onclick = async () => {
+  const btn = $('toggleBtn');
+  const isTranscribing = btn.classList.contains('active');
+  
+  btn.disabled = true;
+  
+  try {
+    const response = await chrome.tabs.sendMessage(currentTabId, {
+      type: isTranscribing ? 'stop_transcription' : 'start_transcription'
+    });
+    
+    if (response && response.success) {
+      updateUI(!isTranscribing);
+    }
+  } catch (error) {
+    showError('Failed to toggle transcription');
+  } finally {
+    btn.disabled = false;
+  }
+};
 
+$('clearBtn').onclick = () => {
+  if (confirm('Clear all transcripts?')) {
+    $('transcriptContent').innerHTML = '<div class="empty-state">No transcripts yet</div>';
+    chrome.storage.local.remove(`transcript_${currentTabId}`);
+    updateLineCount(0);
+  }
+};
+
+$('exportBtn').onclick = async () => {
+  try {
+    const content = await chrome.runtime.sendMessage({
+      type: 'export_transcripts',
+      tabId: currentTabId
+    });
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const filename = `vtf-transcript-${new Date().toISOString().split('T')[0]}.txt`;
+    
+    chrome.downloads.download({
+      url: url,
+      filename: filename,
+      saveAs: true
+    });
+  } catch (error) {
+    showError('Failed to export transcripts');
+  }
+};
+
+$('settingsBtn').onclick = () => {
+  chrome.runtime.openOptionsPage();
+};
+
+// Show error message
 function showError(message) {
   const errorEl = $('errorMessage');
   errorEl.textContent = message;
@@ -148,7 +144,8 @@ function showError(message) {
   setTimeout(() => errorEl.classList.add('hidden'), 5000);
 }
 
-function addTranscriptLine(text, timestamp) {
+// Add transcript entry
+function addTranscriptEntry(text, timestamp) {
   const content = $('transcriptContent');
   
   // Remove empty state
@@ -172,42 +169,67 @@ function addTranscriptLine(text, timestamp) {
   content.appendChild(entry);
   
   // Update count
-  const currentCount = content.querySelectorAll('.transcript-entry').length;
-  updateLineCount(currentCount);
+  updateLineCount(content.querySelectorAll('.transcript-entry').length);
   
   // Auto-scroll
   content.scrollTop = content.scrollHeight;
 }
 
+// Update line count
+function updateLineCount(count) {
+  $('lineCount').textContent = count;
+}
+
+// Load saved transcripts
 async function loadTranscripts() {
   const key = `transcript_${currentTabId}`;
-  const { [key]: transcripts = [] } = await chrome.storage.local.get(key);
+  const result = await chrome.storage.local.get(key);
+  const transcripts = result[key] || [];
   
   if (transcripts.length > 0) {
     $('transcriptContent').innerHTML = '';
+    
     // Show last 50 entries
     const recent = transcripts.slice(-50);
     recent.forEach(entry => {
-      addTranscriptLine(entry.text, entry.date);
+      addTranscriptEntry(entry.text, entry.timestamp);
     });
   }
 }
 
-// Listen for transcript updates
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+// Listen for updates
+chrome.runtime.onMessage.addListener((message) => {
   switch (message.type) {
     case 'transcript_update':
       if (message.tabId === currentTabId) {
-        addTranscriptLine(message.text, message.timestamp);
+        addTranscriptEntry(message.text, message.timestamp);
       }
       break;
       
     case 'transcription_error':
-      showError(message.error);
+      showError(`Transcription error: ${message.error}`);
+      break;
+      
+    case 'error':
+      showError(`${message.context}: ${message.message}`);
       break;
       
     case 'stream_status':
-      updateAudioStatus(message.hasAudio);
+      const streamStatus = $('streamStatus');
+      if (message.status === 'connected') {
+        streamStatus.textContent = `Connected: ${message.sourceId}`;
+        streamStatus.className = 'info-value success';
+      } else {
+        streamStatus.textContent = 'No active stream';
+        streamStatus.className = 'info-value';
+      }
       break;
+  }
+});
+
+// Cleanup
+window.addEventListener('unload', () => {
+  if (statusUpdateInterval) {
+    clearInterval(statusUpdateInterval);
   }
 });
