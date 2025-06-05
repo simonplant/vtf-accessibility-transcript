@@ -1,1 +1,8 @@
 /.DS_Store
+.env
+*.zip
+*.log
+.vscode
+test/results/
+dist/
+node_modules/
