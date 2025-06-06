@@ -3,6 +3,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { execSync } = require('child_process');
+const esbuild = require('esbuild');
 
 // Colors for console output
 const colors = {
@@ -71,16 +72,6 @@ async function copyIcons() {
   }
 }
 
-async function createPlaceholderIcons() {
-  await fs.mkdir('dist/icons', { recursive: true });
-  
-  // Create simple placeholder files
-  const sizes = [16, 48, 128];
-  for (const size of sizes) {
-    await fs.writeFile(`dist/icons/icon${size}.png`, '');
-  }
-  log.success('Created placeholder icons');
-}
 
 async function copyWorkers() {
   log.info('Copying workers...');
@@ -95,57 +86,19 @@ async function copyWorkers() {
 }
 
 async function bundleContentScript() {
-  log.info('Bundling content script...');
-  
-  // Module order matters - dependencies first
-  const moduleFiles = [
-    'vtf-globals-finder.js',
-    'vtf-stream-monitor.js', 
-    'vtf-state-monitor.js',
-    'vtf-audio-worklet-node.js',
-    'audio-data-transfer.js',
-    'vtf-audio-capture.js'
-  ];
-  
-  let bundled = '(function() {\n"use strict";\n\n';
-  bundled += '// VTF Audio Extension - Bundled Content Script\n';
-  bundled += '// Built: ' + new Date().toISOString() + '\n\n';
-  
-  // Process each module
-  for (const file of moduleFiles) {
-    try {
-      let moduleContent = await fs.readFile(`src/modules/${file}`, 'utf8');
-      
-      // Remove all import/export statements
-      moduleContent = moduleContent
-        .replace(/^import\s+.*?from\s+['"].*?['"];?\s*$/gm, '')
-        .replace(/^export\s+(default\s+)?(class|function|const|let|var)/gm, '$2')
-        .replace(/^export\s*\{[^}]*\};\s*$/gm, '')
-        .replace(/^export\s+default\s+(\w+);\s*$/gm, '');
-      
-      bundled += `// ===== ${file} =====\n${moduleContent}\n\n`;
-    } catch (error) {
-      log.error(`Failed to process ${file}: ${error.message}`);
-    }
-  }
-  
-  // Process main content script
+  log.info('Bundling content script with esbuild...');
   try {
-    let mainContent = await fs.readFile('src/content.js', 'utf8');
-    
-    mainContent = mainContent
-      .replace(/^import\s+.*?from\s+['"].*?['"];?\s*$/gm, '')
-      .replace(/^export\s+.*?$/gm, '');
-    
-    bundled += `// ===== Main Content Script =====\n${mainContent}\n\n`;
+    await esbuild.build({
+      entryPoints: ['src/content.js'],
+      outfile: 'dist/content-bundle.js',
+      bundle: true,
+      format: 'iife',
+      target: 'chrome102'
+    });
+    log.success('Bundled content script (dist/content-bundle.js)');
   } catch (error) {
-    log.error(`Failed to process content.js: ${error.message}`);
+    log.error(`Failed to bundle content script: ${error.message}`);
   }
-  
-  bundled += '})();';
-  
-  await fs.writeFile('dist/content.js', bundled);
-  log.success('Bundled content script');
 }
 
 async function bundleBackground() {

@@ -1,7 +1,7 @@
 # VTF Audio Extension
 
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green.svg)](https://www.google.com/chrome/)
-[![Version](https://img.shields.io/badge/version-0.5.0.0-blue.svg)](https://github.com/simonplant/vtf-audio-extension)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](https://github.com/simonplant/vtf-audio-extension)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 [![Chrome Version](https://img.shields.io/badge/Chrome-102%2B-yellow.svg)](https://www.google.com/chrome/)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-purple.svg)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -24,6 +24,7 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
 - **Robust Error Handling**: Automatic recovery from VTF reconnections
 - **Manifest V3**: Future-proof Chrome extension architecture
 - **Zero Monkey-Patching**: Clean implementation without property overrides
+- **Build System**: Automated bundling for optimal Chrome performance
 
 ## 📦 Installation
 
@@ -40,40 +41,50 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
    cd vtf-audio-extension
    ```
 
-2. **Load in Chrome:**
+2. **Build the extension:**
+   ```bash
+   npm install
+   npm run build
+   ```
+
+3. **Load in Chrome:**
    - Open Chrome and navigate to `chrome://extensions/`
    - Enable "Developer mode" (toggle in top right)
    - Click "Load unpacked"
-   - Select the `src` directory from the cloned repository
+   - Select the `dist` directory (created by the build)
 
-3. **Configure API Key:**
+4. **Configure API Key:**
    - Click the extension icon in Chrome toolbar
    - Click the settings (⚙️) button
    - Enter your OpenAI API key
    - Click "Save API Settings"
 
-#### Troubleshooting Installation
-- If the extension does not appear, ensure you selected the `src` folder, not the project root.
-- If you see errors about permissions, refresh the extensions page and try again.
-- For issues with the API key, double-check that it starts with `sk-` and has the correct permissions.
-- If you see "Manifest not found" errors, ensure you are using Chrome 102+ and have selected the correct folder.
+#### Quick Install (Pre-built)
+If a release is available, download the `.zip` file from the [Releases](https://github.com/simonplant/vtf-audio-extension/releases) page and load it directly in Chrome.
 
 ### Development Setup (for Contributors)
 
-1. **Install dependencies (optional, for build tools):**
+1. **Clone and install dependencies:**
    ```bash
+   git clone https://github.com/simonplant/vtf-audio-extension.git
+   cd vtf-audio-extension
    npm install
    ```
-2. **Run tests:**
+
+2. **Start development mode:**
    ```bash
-   npm test
-   ```
-3. **Build for production (coming soon):**
-   ```bash
-   npm run build
+   npm run dev
+   # Watches for changes and auto-rebuilds
    ```
 
+3. **Load the extension:**
+   - In Chrome, load the `dist` directory
+   - The extension auto-rebuilds on file changes
+   - Just reload the extension in Chrome after changes
+
 ## 🎮 Usage
+
+### Basic Operation
 
 1. **Navigate to VTF**: Go to [vtf.t3live.com](https://vtf.t3live.com)
 2. **Start Capture**: Click the extension icon and press "Start Capture"
@@ -83,21 +94,25 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
 ### Features Guide
 
 #### Speaker Identification
+The extension automatically identifies speakers and allows custom naming:
 - Go to **Options → Speaker Identification**
 - Add custom mappings for user IDs
 - Import/export speaker configurations
 - Enable Auto-Learn to automatically save new speakers
 
 #### Auto-Start
+Enable automatic capture when visiting VTF:
 - **Options → Capture Settings → Auto-start capture**
 
 #### Buffer Configuration
+Fine-tune transcription timing:
 - **Options → Capture Settings → Buffer Duration**
   - Lower (0.5s) = Faster transcription, more API calls
   - Higher (5s) = Better context, fewer API calls
   - Default: 1.5s (recommended)
 
 #### Silence Detection
+Adjust sensitivity for speech detection:
 - **Options → Capture Settings → Silence Detection Sensitivity**
   - High: Captures quiet speech
   - Low: Filters out background noise
@@ -135,34 +150,74 @@ VTF Web Page
 #### Service Worker
 - **Intelligent Buffering**: Per-user audio buffers with silence detection
 - **Retry Logic**: Exponential backoff for API failures
-- **Legacy Support**: Compatible with v1.x message formats during migration
+- **Message Handling**: Chrome extension message protocol
 
 ## 👨‍💻 Development
 
 ### Project Structure
 ```
 vtf-audio-extension/
-├── src/
-│   ├── content.js          # Main content script
-│   ├── background.js       # Service worker
-│   ├── manifest.json       # Extension manifest v3
-│   ├── popup.html/js       # Extension popup UI
-│   ├── options.html/js     # Settings page
-│   ├── style.css          # Unified styles
-│   ├── modules/           # Core modules
+├── README.md              # Documentation
+├── package.json           # Build configuration
+├── .gitignore            # Git ignore rules
+├── dist/                 # Built extension (git-ignored)
+│   ├── manifest.json
+│   ├── content.js        # Bundled modules + content script
+│   ├── background.js
+│   ├── popup.html/js
+│   ├── options.html/js
+│   ├── style.css
+│   ├── icons/
+│   └── workers/
+├── src/                  # Source code
+│   ├── content.js        # Main content script
+│   ├── background.js     # Service worker
+│   ├── manifest.json     # Extension manifest v3
+│   ├── popup.html/js     # Extension popup UI
+│   ├── options.html/js   # Settings page
+│   ├── style.css         # Unified styles
+│   ├── modules/          # Core modules (bundled during build)
 │   │   ├── vtf-globals-finder.js
 │   │   ├── vtf-stream-monitor.js
 │   │   ├── vtf-state-monitor.js
 │   │   ├── vtf-audio-capture.js
 │   │   ├── vtf-audio-worklet-node.js
 │   │   └── audio-data-transfer.js
-│   └── workers/
-│       └── audio-worklet.js  # Audio processing worker
-├── test/                  # Test files
-├── docs/                  # Documentation
-│   └── design/           # Architecture documents
-└── README.md             # This file
+│   ├── workers/
+│   │   └── audio-worklet.js
+│   └── icons/
+├── scripts/              # Build system
+│   ├── build.js          # Main build script
+│   ├── dev.js           # Development watcher
+│   └── setup.js         # Initial setup
+├── test/                 # Test files
+└── docs/                 # Additional documentation
+
+### Building from Source
+
+The extension uses a build system to bundle modules for Chrome compatibility:
+
+```bash
+# Install dependencies
+npm install
+
+# Development mode (auto-rebuild on changes)
+npm run dev
+
+# Production build
+npm run build
+
+# Create distributable .zip
+npm run package
+
+# Clean build directory
+npm run clean
 ```
+
+#### Build Scripts
+- `npm run build` - Creates optimized bundle in `dist/`
+- `npm run dev` - Watches files and auto-rebuilds
+- `npm run package` - Creates `vtf-audio-extension.zip` for distribution
 
 ### Testing
 
@@ -260,44 +315,7 @@ window.vtfExtension.debug()
 | Memory per Speaker | 5MB | 10MB |
 | Network Usage | 100KB/min | 200KB/min |
 
-## 💸 Estimated Monthly Billing & Usage Forecast
 
-### Whisper API Pricing
-- **Current Price:** $0.006 per audio minute (as of June 2024)
-- **Billing is based on the total duration of audio sent for transcription, not the length of the resulting text.**
-
-### How the Extension Uses the API
-- **Buffer Duration:** By default, the extension sends 1.5 seconds of audio per transcription request (configurable in settings).
-- **Silence Detection:** Only non-silent audio is sent, reducing unnecessary API calls.
-- **Mono, 16kHz:** Audio is optimized for Whisper's requirements, minimizing file size and cost.
-
-### Example Cost Calculations
-
-#### Typical Usage Scenario
-- **1 user, 8 hours/day, 22 days/month**
-- **Active audio (not silence):** ~6 hours/day (assuming breaks, silence, etc)
-- **Total audio per month:** 6 hours × 22 days = 132 hours = 7,920 minutes
-- **Estimated monthly cost:** 7,920 × $0.006 = **$47.52**
-
-#### Light Usage Scenario
-- **1 user, 2 hours/day, 20 days/month**
-- **Active audio:** ~1.5 hours/day
-- **Total audio per month:** 1.5 × 20 = 30 hours = 1,800 minutes
-- **Estimated monthly cost:** 1,800 × $0.006 = **$10.80**
-
-#### Multi-Speaker Scenario
-- **3 users, 4 hours/day, 20 days/month**
-- **Active audio per user:** ~3 hours/day
-- **Total audio per month:** 3 users × 3 hours × 20 days = 180 hours = 10,800 minutes
-- **Estimated monthly cost:** 10,800 × $0.006 = **$64.80**
-
-### How to Estimate Your Own Costs
-1. **Estimate total minutes of non-silent audio per month** (per user or total).
-2. **Multiply by $0.006** to get your monthly cost.
-
-> **Tip:** You can reduce costs by increasing the buffer duration (fewer API calls, longer context) or by adjusting silence detection sensitivity to avoid transcribing background noise.
-
-**Note:** Prices are subject to change. Always check [OpenAI's pricing page](https://openai.com/pricing) for the latest rates.
 
 ## 🤝 Contributing
 
@@ -350,38 +368,20 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **Discussions**: [GitHub Discussions](https://github.com/simonplant/vtf-audio-extension/discussions)
 - **Wiki**: [Project Wiki](https://github.com/simonplant/vtf-audio-extension/wiki)
 
+## 🚀 Roadmap
+
+### Version 0.6.0 (Planned)
+- [ ] Local Whisper model support
+- [ ] Real-time transcription display overlay
+- [ ] Keyboard shortcuts
+- [ ] Export to various formats (SRT, VTT, TXT)
+
+### Version 0.7.0 (Future)
+- [ ] Multi-language support
+- [ ] Custom vocabulary/terminology
+- [ ] Speaker diarization improvements
+- [ ] Integration with note-taking apps
+
 ---
 
 **Disclaimer**: This extension is an independent project and is not affiliated with, endorsed by, or associated with T3 Trading Group, Virtual Trading Floor (VTF), or T3 Live. All trademarks belong to their respective owners.
-
-## ⚠️ Important: Bundling Content Script for Chrome Extension
-
-Chrome extensions (Manifest V3) do **not** support ES6 module imports in content scripts. You must bundle your content script and its modules before loading or publishing the extension.
-
-### Quick Start: Bundle with esbuild
-
-1. **Install esbuild (if not already):**
-   ```bash
-   npm install --save-dev esbuild
-   ```
-2. **Bundle the content script:**
-   ```bash
-   node scripts/build-content.js
-   ```
-   This will generate `src/content-bundle.js` from your modular `src/content.js`.
-
-3. **Ensure your `manifest.json` uses the bundled file:**
-   ```json
-   {
-     "content_scripts": [{
-       "matches": ["*://vtf.t3live.com/*"],
-       "js": ["content-bundle.js"],
-       "run_at": "document_idle",
-       "all_frames": false
-     }]
-   }
-   ```
-
-> **You must re-bundle every time you change your content script or its modules!**
-
----
