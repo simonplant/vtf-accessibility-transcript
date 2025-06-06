@@ -16,7 +16,6 @@ import { VTFAudioWorkletNode } from './vtf-audio-worklet-node.js';
 class AudioDataTransfer {
   sendAudioData(userId, samples) {
     console.log(`[Audio Transfer] Would send ${samples.length} samples for ${userId}`);
-    // Will be implemented in next module
   }
 }
 

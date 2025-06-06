@@ -10,6 +10,7 @@
         "package": "node scripts/build.js --package",
         "clean": "rm -rf dist",
         "test": "echo \"No tests yet\"",
+        "build:content": "node scripts/build-content.js",
         "install-deps": "npm install --save-dev esbuild"
     },
     "devDependencies": {

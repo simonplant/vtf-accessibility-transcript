@@ -127,13 +127,22 @@ VTF Web Page
     │   ├── VTFStreamMonitor - Monitors audio stream assignment
     │   ├── VTFStateMonitor - Tracks VTF state changes
     │   └── VTFAudioCapture - Captures audio data
-    │       └── AudioDataTransfer - Sends to service worker
+    │       └── AudioDataTransfer - Sends to service worker (currently stubbed)
     │
     └── background.js (Service Worker)
         ├── UserBufferManager - Manages per-user buffers
         ├── Whisper API Client - Handles transcription
         └── Storage Manager - Persists settings/history
 ```
+
+### Build System
+
+The extension uses a custom build system to bundle ES6 modules for Chrome compatibility:
+
+- **Source modules** in `src/modules/` use ES6 import/export syntax
+- **Build process** bundles into `dist/content-bundle.js` with all imports resolved
+- **AudioWorklet** remains separate as it runs in a different context
+- **No dynamic imports** - all modules are bundled at build time
 
 ### Key Components
 
@@ -195,29 +204,18 @@ vtf-audio-extension/
 
 ### Building from Source
 
-The extension uses a build system to bundle modules for Chrome compatibility:
+The extension uses a custom build system to bundle ES6 modules for Chrome compatibility:
 
-```bash
-# Install dependencies
-npm install
-
-# Development mode (auto-rebuild on changes)
-npm run dev
-
-# Production build
-npm run build
-
-# Create distributable .zip
-npm run package
-
-# Clean build directory
-npm run clean
-```
+- **Source modules** in `src/modules/` use ES6 import/export syntax
+- **Build process** bundles into `dist/content-bundle.js` with all imports resolved
+- **AudioWorklet** remains separate as it runs in a different context
+- **No dynamic imports** - all modules are bundled at build time
 
 #### Build Scripts
 - `npm run build` - Creates optimized bundle in `dist/`
 - `npm run dev` - Watches files and auto-rebuilds
 - `npm run package` - Creates `vtf-audio-extension.zip` for distribution
+- `npm run build:content` - Bundles content script for Chrome compatibility
 
 ### Testing
 
@@ -288,7 +286,33 @@ window.vtfExtension.debug()
 // Shows detailed state of all modules
 ```
 
+#### Extension Not Loading / Context Invalidated
+- **Symptom**: "Extension context invalidated" errors
+- **Cause**: Module loading issues or syntax errors
+- **Solution**: 
+  1. Ensure you've run `npm run build` after any changes
+  2. Check that `dist/content-bundle.js` exists
+  3. Reload the extension in chrome://extensions/
+  4. Check for syntax errors in console
+
 ## 📊 Technical Details
+
+### Module Architecture
+
+#### Content Script Loading
+- Chrome doesn't support ES6 modules in content scripts directly
+- All modules are bundled into a single IIFE (Immediately Invoked Function Expression)
+- Module load order is preserved: foundation → audio pipeline → main script
+- AudioDataTransfer is temporarily stubbed pending full implementation
+
+#### Build Process Details
+```bash
+# The build script:
+1. Reads all modules in dependency order
+2. Strips import/export statements
+3. Wraps in IIFE to prevent global pollution
+4. Outputs to dist/content-bundle.js
+```
 
 ### Audio Processing
 - **Sample Rate**: 16kHz (optimal for Whisper)
@@ -314,8 +338,6 @@ window.vtfExtension.debug()
 | Memory Baseline | 40MB | 60MB |
 | Memory per Speaker | 5MB | 10MB |
 | Network Usage | 100KB/min | 200KB/min |
-
-
 
 ## 🤝 Contributing
 
