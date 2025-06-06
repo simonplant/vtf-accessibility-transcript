@@ -44,6 +44,37 @@ class VTFAudioExtension {
   }
   
   
+  injectAudioHook() {
+    // Inject our audio hook into the page
+    const script = document.createElement('script');
+    script.src = chrome.runtime.getURL('inject/audio-hook.js');
+    script.onload = () => script.remove();
+    (document.head || document.documentElement).appendChild(script);
+    // Listen for messages from injected script
+    window.addEventListener('message', (event) => {
+      if (event.data.source !== 'vtf-audio-hook') return;
+      switch (event.data.type) {
+        case 'hookReady':
+          console.log('[VTF Extension] Audio hook ready');
+          break;
+        case 'audioData':
+          // Forward to background
+          chrome.runtime.sendMessage({
+            type: 'audioChunk',
+            userId: event.data.data.userId,
+            chunk: event.data.data.samples,
+            timestamp: event.data.data.timestamp,
+            sampleRate: 16000
+          });
+          break;
+        case 'captureStarted':
+          console.log('[VTF Extension] Capture started for', event.data.data.userId);
+          break;
+      }
+    });
+  }
+  
+  
   async init() {
     
     try {
@@ -85,6 +116,10 @@ class VTFAudioExtension {
       
       
       this.setupMessageHandlers();
+      
+      
+      // Inject audio hook after globals are found
+      this.injectAudioHook();
       
       
       const settings = await this.loadSettings();

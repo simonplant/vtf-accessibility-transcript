@@ -1,0 +1,10 @@
+{
+  "web_accessible_resources": [{
+    "resources": [
+      "inject/audio-hook.js",
+      "workers/audio-worklet.js",
+      "modules/*.js"
+    ],
+    "matches": ["*://vtf.t3live.com/*"]
+  }]
+} 
