@@ -8,16 +8,12 @@
         "setup": "node scripts/setup.js",
         "dev": "node scripts/dev.js",
         "build": "node scripts/build.js",
-        "package": "node scripts/build.js --package",
+        "build:prod": "NODE_ENV=production node scripts/build.js",
+        "package": "NODE_ENV=production node scripts/build.js --package",
         "clean": "node scripts/clean.js",
         "test": "node scripts/test.js",
-        "start": "npm run dev",
-        "dist": "npm run package",
-        "predev": "node scripts/check-env.js",
-        "prebuild": "node scripts/check-env.js",
-        "deploy:test": "npm run build && node scripts/deploy-test.js",
-        "deploy:prod": "npm run package && node scripts/deploy-prod.js",
-        "all": "npm run clean && npm run build && npm run test"
+        "lint": "echo 'No linter configured'",
+        "check": "node scripts/check-env.js"
     },
     "devDependencies": {
         "esbuild": "^0.19.0",

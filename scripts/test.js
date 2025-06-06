@@ -1,30 +1,57 @@
 #!/usr/bin/env node
 
-/**
- * Simple test runner for VTF Audio Extension
- * 
- * For now, just runs the existing test files in the browser
- * since the modules are browser-based (ES modules, Chrome APIs)
- */
+const { resolve, log, showHeader } = require('./shared');
+const fs = require('fs').promises;
+const path = require('path');
 
-console.log('🧪 VTF Audio Extension Tests\n');
-console.log('The test files are designed to run in the browser console.\n');
-console.log('To run tests:');
-console.log('1. Load the extension in Chrome');
-console.log('2. Navigate to https://vtf.t3live.com/');
-console.log('3. Open Chrome DevTools (F12)');
-console.log('4. In the Console, copy and paste test files from test/unit/\n');
-console.log('Available test files:');
-console.log('- test/unit/test-globals-finder.js');
-console.log('- test/unit/test-stream-monitor.js');
-console.log('- test/unit/test-state-monitor.js');
-console.log('- test/unit/test-audio-capture.js');
-console.log('- test/unit/test-audio-data-transfer.js');
-console.log('- test/unit/test-audio-worklet.js\n');
-console.log('Integration test:');
-console.log('- test/integration/test-vtf-integration.js\n');
-console.log('Example usage files:');
-console.log('- test/unit/example-*.js\n');
+async function findTestFiles() {
+  const testDirs = ['test/unit', 'test/integration'];
+  const testFiles = [];
+  
+  for (const dir of testDirs) {
+    try {
+      const files = await fs.readdir(resolve(dir));
+      const tests = files.filter(f => f.startsWith('test-') && f.endsWith('.js'));
+      testFiles.push(...tests.map(f => path.join(dir, f)));
+    } catch (error) {
+      // Directory doesn't exist
+    }
+  }
+  
+  return testFiles;
+}
 
-// Exit successfully
-process.exit(0);
+async function runTests() {
+  showHeader('VTF Extension Test Suite');
+  
+  const testFiles = await findTestFiles();
+  
+  if (testFiles.length === 0) {
+    log.warn('No test files found');
+    log.info('Test files should be named test-*.js in test/unit/ or test/integration/');
+    return;
+  }
+  
+  log.info(`Found ${testFiles.length} test files`);
+  console.log('');
+  
+  // Since tests are browser-based, provide instructions
+  console.log('To run tests:');
+  console.log('1. Build the extension: npm run build');
+  console.log('2. Load in Chrome: chrome://extensions/');
+  console.log('3. Navigate to: https://vtf.t3live.com/');
+  console.log('4. Open Chrome DevTools (F12)');
+  console.log('5. In Console, copy and paste test files:\n');
+  
+  for (const file of testFiles) {
+    console.log(`   • ${file}`);
+  }
+  
+  console.log('\nTest files are designed to run in the browser console.');
+  console.log('They test the actual extension modules in their runtime environment.');
+}
+
+runTests().catch(error => {
+  log.error(`Test runner failed: ${error.message}`);
+  process.exit(1);
+});

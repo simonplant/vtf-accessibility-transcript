@@ -2,58 +2,62 @@
 
 const chokidar = require('chokidar');
 const { spawn } = require('child_process');
-const path = require('path');
+const { resolve, log, showHeader, colors } = require('./shared');
 
-console.log(`
-╔════════════════════════════════════════╗
-║      VTF Extension Dev Mode 🚀         ║
-╚════════════════════════════════════════╝
-
-Watching for changes...
-`);
+showHeader('VTF Extension Development Mode');
 
 let buildProcess = null;
 let buildTimeout = null;
-let lastBuildTime = 0;
+let isBuilding = false;
 
-function build(changedFile) {
+function runBuild(trigger) {
   // Debounce rapid changes
   if (buildTimeout) {
     clearTimeout(buildTimeout);
   }
   
   buildTimeout = setTimeout(() => {
-    const now = Date.now();
-    if (now - lastBuildTime < 1000) return;
-    lastBuildTime = now;
+    if (isBuilding) {
+      log.warn('Build already in progress, queuing...');
+      return;
+    }
+    
+    isBuilding = true;
     
     if (buildProcess) {
       buildProcess.kill();
     }
     
-    console.log(`\n🔄 Change detected: ${changedFile}`);
-    console.time('Build time');
+    console.log(`\n${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
+    log.info(`Change detected: ${trigger}`);
+    console.time('Build completed in');
     
-    buildProcess = spawn('node', ['scripts/build.js'], {
-      stdio: 'inherit'
+    buildProcess = spawn('node', [resolve('scripts/build.js')], {
+      stdio: 'inherit',
+      cwd: resolve()
     });
     
     buildProcess.on('close', (code) => {
-      console.timeEnd('Build time');
+      isBuilding = false;
+      console.timeEnd('Build completed in');
+      
       if (code === 0) {
-        console.log('✅ Ready! Reload extension in Chrome\n');
-        console.log('Watching for changes...\n');
+        log.success('Ready! Reload extension in Chrome');
+        console.log(`${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
+      } else {
+        log.error('Build failed! Check errors above');
       }
     });
   }, 100);
 }
 
-// Watch configuration
-const watcher = chokidar.watch('src', {
+// Set up file watcher
+const watcher = chokidar.watch(resolve('src'), {
   ignored: [
     /(^|[\/\\])\../,  // Dotfiles
-    /\.swp$/,         // Vim swap files
-    /~$/              // Backup files
+    /node_modules/,
+    /\.swp$/,
+    /~$/
   ],
   persistent: true,
   ignoreInitial: true
@@ -61,23 +65,30 @@ const watcher = chokidar.watch('src', {
 
 // Watch events
 watcher
-  .on('add', path => build(path))
-  .on('change', path => build(path))
-  .on('unlink', path => build(path))
-  .on('error', error => console.error('Watch error:', error));
+  .on('add', path => runBuild(path.replace(resolve(), '')))
+  .on('change', path => runBuild(path.replace(resolve(), '')))
+  .on('unlink', path => runBuild(path.replace(resolve(), '')))
+  .on('error', error => log.error(`Watcher error: ${error}`));
 
 // Initial build
-build('initial');
+log.info('Starting initial build...');
+runBuild('startup');
 
-// Graceful shutdown
+// Handle shutdown
 process.on('SIGINT', () => {
-  console.log('\n\n👋 Stopping dev mode...');
+  console.log('\n');
+  log.info('Shutting down dev mode...');
+  
   watcher.close();
   if (buildProcess) {
     buildProcess.kill();
   }
+  
+  log.success('Dev mode stopped');
   process.exit(0);
 });
 
 // Keep process alive
 process.stdin.resume();
+
+console.log(`\n${colors.yellow}Watching for changes...${colors.reset}\nPress Ctrl+C to stop\n`);
