@@ -72,11 +72,5 @@ npm run lint
   - Refresh the extension in Chrome
   - Hard refresh the VTF page (Cmd+Shift+R)
 
-## No Legacy Bloat
-- No references to content-bundle.js
-- No manual file copying
-- No multi-stage or enterprise build steps
-- No unnecessary dependencies
-
 ## For More Info
 See the main README for usage, project structure, and troubleshooting. 

@@ -308,7 +308,7 @@ VTF Web Page
 The extension uses a custom build system to bundle ES6 modules for Chrome compatibility:
 
 - **Source modules** in `src/modules/` use ES6 import/export syntax
-- **Build process** bundles into `dist/content-bundle.js` with all imports resolved
+- **Build process** bundles into `dist/content.js` with all imports resolved
 - **AudioWorklet** remains separate as it runs in a different context
 - **No dynamic imports** - all modules are bundled at build time
 
@@ -375,7 +375,7 @@ vtf-audio-extension/
 The extension uses a custom build system to bundle ES6 modules for Chrome compatibility:
 
 - **Source modules** in `src/modules/` use ES6 import/export syntax
-- **Build process** bundles into `dist/content-bundle.js` with all imports resolved
+- **Build process** bundles into `dist/content.js` with all imports resolved
 - **AudioWorklet** remains separate as it runs in a different context
 - **No dynamic imports** - all modules are bundled at build time
 
@@ -459,7 +459,7 @@ window.vtfExtension.debug()
 - **Cause**: Module loading issues or syntax errors
 - **Solution**: 
   1. Ensure you've run `npm run build` after any changes
-  2. Check that `dist/content-bundle.js` exists
+  2. Check that `dist/content.js` exists
   3. Reload the extension in chrome://extensions/
   4. Check for syntax errors in console
 
@@ -479,7 +479,7 @@ window.vtfExtension.debug()
 1. Reads all modules in dependency order
 2. Strips import/export statements
 3. Wraps in IIFE to prevent global pollution
-4. Outputs to dist/content-bundle.js
+4. Outputs to dist/content.js
 ```
 
 ### Audio Processing

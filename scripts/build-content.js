@@ -3,7 +3,7 @@ const esbuild = require('esbuild');
 esbuild.build({
   entryPoints: ['src/content.js'],
   bundle: true,
-  outfile: 'src/content-bundle.js',
+  outfile: 'dist/content.js',
   format: 'iife',
   target: 'chrome102',
   loader: {
