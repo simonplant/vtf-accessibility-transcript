@@ -1,3 +1,34 @@
+# Integration Testing for VTF Audio Extension
+
+## Automated Build & Test
+- The build and test process is now fully automated.
+- Use `npm run all` to check, clean, build, and test everything.
+- Use `npm run test` to see test instructions and available test files.
+
+## Manual & Scenario Testing
+- Load the extension in Chrome (see main README for instructions).
+- Open the browser console on [vtf.t3live.com](https://vtf.t3live.com).
+- Use the test harness and scenario buttons to run specific tests.
+
+### Example Console Usage
+```js
+// Access test harness
+testHarness.globalsFinder
+// Debug modules
+testHarness.globalsFinder.debug()
+// Simulate VTF behaviors
+simulateVTFBehaviors.userJoins('testUser123')
+```
+
+## Test Scenarios
+- Cold Start: Modules initialize when VTF is not present
+- Hot Start: Modules initialize when VTF is already loaded
+- Audio Lifecycle: Test audio element creation/removal
+- State Changes: Test volume/session/reconnect events
+- Error Recovery: Test error handling and recovery
+
+See the main README for more details on development and troubleshooting.
+
 2. **Run all tests**:
 - Click "Run All Tests" button
 - Watch the test log for results

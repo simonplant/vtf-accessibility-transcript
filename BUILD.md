@@ -1,58 +1,82 @@
 # Build System Documentation
 
 ## Overview
-The VTF Audio Extension uses a custom build system to handle Chrome's content script limitations.
+The VTF Audio Extension uses a modern, automated build system designed for solo developers. It is optimized for Chrome extension development, with no enterprise bloat and maximum transparency.
 
-## Why Custom Build?
+## Why a Custom Build?
 - Chrome content scripts don't support ES6 modules
 - Need to maintain clean module structure during development
-- Automatic dependency resolution and bundling
+- Fast, reliable, and transparent builds
 
-## Build Process
+## Build & Development Workflow
 
-### 1. Module Bundling
-The build system processes modules in this order:
-```javascript
-const moduleFiles = [
-  'vtf-globals-finder.js',
-  'vtf-stream-monitor.js', 
-  'vtf-state-monitor.js',
-  'vtf-audio-worklet-node.js',
-  'audio-data-transfer.js',
-  'vtf-audio-capture.js'
-];
+### 1. One-Command Build & Setup
+Run this after cloning:
+```bash
+npm run all
+# Checks environment, cleans, installs, builds, and tests everything
 ```
 
-### 2. Import/Export Stripping
-- Removes all `import` statements
-- Removes all `export` statements
-- Preserves class and function declarations
-
-### 3. IIFE Wrapping
-Entire bundle is wrapped to prevent global pollution:
-```javascript
-(function() {
-  'use strict';
-  // All modules here
-})();
+### 2. Development Mode (Auto-Rebuild)
+```bash
+npm run dev
+# Watches for changes and auto-rebuilds
 ```
 
-### 4. Known Issues Resolved
-- **ES6 Module Loading**: Fixed by bundling
-- **Circular Dependencies**: Fixed by stubbing AudioDataTransfer
-- **Chrome Context**: Fixed by using proper content script format
+### 3. Manual Build
+```bash
+npm run build
+# Or: npm run build -- --open  # (macOS: auto-opens chrome://extensions/)
+```
 
-## Development Workflow
+### 4. Packaging for Distribution
+```bash
+npm run package
+# Creates vtf-audio-extension-v<version>.zip for Chrome Web Store/manual install
+```
 
-1. Edit source files in `src/modules/`
-2. Run `npm run dev` for auto-rebuild
-3. Reload extension in Chrome
-4. Test changes
+### 5. Clean All Artifacts
+```bash
+npm run clean
+# Removes dist/ and all .zip files
+```
 
-## Debugging
+### 6. Dependency & Security Check
+```bash
+npm run check
+# Audits for outdated or vulnerable dependencies
+```
 
-If modules aren't loading:
-1. Check `dist/content-bundle.js` exists
-2. Look for syntax errors in the bundle
-3. Verify module order in build script
-4. Check Chrome console for specific errors 
+### 7. Lint (Optional)
+```bash
+npm run lint
+# Only runs if ESLint is configured
+```
+
+## Output Structure
+- All build outputs go to `dist/`
+- Main content script: `dist/content.js` (referenced in manifest.json)
+- All static assets, icons, and workers are copied to `dist/`
+- Zips are created in the project root for distribution
+
+## Troubleshooting
+- **Extension not loading:**
+  - Make sure you selected the `dist` folder, not `src`
+  - Check Chrome DevTools console for errors
+  - Try: `npm run clean && npm run build`
+- **Build errors:**
+  - Check the build summary for missing files or warnings
+  - Run `npm run check` to see if dependencies are outdated or vulnerable
+- **Changes not showing:**
+  - Make sure `npm run dev` is running
+  - Refresh the extension in Chrome
+  - Hard refresh the VTF page (Cmd+Shift+R)
+
+## No Legacy Bloat
+- No references to content-bundle.js
+- No manual file copying
+- No multi-stage or enterprise build steps
+- No unnecessary dependencies
+
+## For More Info
+See the main README for usage, project structure, and troubleshooting. 

@@ -8,6 +8,137 @@
 
 Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper API.
 
+---
+
+## 🚀 Quickstart: Build & Load the Extension
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/simonplant/vtf-audio-extension.git
+   cd vtf-audio-extension
+   ```
+2. **Run the all-in-one setup/build:**
+   ```bash
+   npm run all
+   # This checks your environment, cleans, installs, builds, and tests everything
+   ```
+3. **Load in Chrome:**
+   - Open Chrome and go to `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked" and select the `dist` directory
+
+4. **Configure API Key:**
+   - Click the extension icon in Chrome toolbar
+   - Click the settings (⚙️) button
+   - Enter your OpenAI API key
+   - Click "Save API Settings"
+
+---
+
+## 🛠️ Development Workflow
+
+- **Start dev mode (auto-rebuild):**
+  ```bash
+  npm run dev
+  # Watches for changes and auto-rebuilds
+  ```
+- **Build for production:**
+  ```bash
+  npm run build
+  # Or: npm run build -- --open  # (macOS: auto-opens chrome://extensions/)
+  ```
+- **Clean all build artifacts and zips:**
+  ```bash
+  npm run clean
+  ```
+- **Run tests:**
+  ```bash
+  npm run test
+  ```
+- **Check dependencies and security:**
+  ```bash
+  npm run check
+  ```
+- **Lint (optional):**
+  ```bash
+  npm run lint
+  # Only runs if ESLint is configured
+  ```
+
+---
+
+## 🏗️ Build System Overview
+
+- **Automated:** One command (`npm run all`) sets up, builds, and tests everything.
+- **Transparent:** Every step prints a clear, color-coded summary and next steps.
+- **Clean:** No enterprise bloat, no unnecessary dependencies, no legacy scripts.
+- **Standard Output:** Bundles to `dist/content.js` (referenced in `manifest.json`).
+- **Packaging:** `npm run package` creates a zip for Chrome Web Store/manual install.
+- **Dev Mode:** `npm run dev` watches for changes and rebuilds instantly.
+- **Dependency & Security Checks:** `npm run check` audits and checks for outdated packages.
+- **Clean Command:** `npm run clean` removes all build artifacts and zips.
+
+---
+
+## 🧩 Project Structure
+
+```
+vtf-audio-extension/
+├── README.md              # Documentation
+├── package.json           # Build configuration
+├── dist/                  # Built extension (git-ignored)
+│   ├── manifest.json
+│   ├── content.js         # Bundled content script
+│   ├── background.js
+│   ├── popup.html/js
+│   ├── options.html/js
+│   ├── style.css
+│   ├── icons/
+│   └── workers/
+├── src/                   # Source code
+│   ├── content.js         # Main content script
+│   ├── background.js      # Service worker
+│   ├── manifest.json      # Extension manifest v3
+│   ├── popup.html/js      # Extension popup UI
+│   ├── options.html/js    # Settings page
+│   ├── style.css          # Unified styles
+│   ├── modules/           # Core modules (bundled during build)
+│   ├── workers/
+│   └── icons/
+├── scripts/               # Build system
+│   ├── build.js           # Main build script
+│   ├── dev.js             # Development watcher
+│   ├── clean.js           # Clean artifacts/zips
+│   ├── check-env.js       # Environment & dependency check
+│   └── shared.js          # Shared utilities
+└── test/                  # Test files
+```
+
+---
+
+## 🐞 Troubleshooting
+
+- **Extension not loading:**
+  - Make sure you selected the `dist` folder, not `src`.
+  - Check Chrome DevTools console for errors.
+  - Try: `npm run clean && npm run build`
+- **Build errors:**
+  - Check the build summary for missing files or warnings.
+  - Run `npm run check` to see if dependencies are outdated or vulnerable.
+- **Changes not showing:**
+  - Make sure `npm run dev` is running.
+  - Refresh the extension in Chrome.
+  - Hard refresh the VTF page (Cmd+Shift+R).
+- **API Key issues:**
+  - Ensure your key starts with `sk-` and has audio model permissions.
+  - Test your key at [platform.openai.com](https://platform.openai.com)
+
+---
+
+## 📄 License
+
+MIT
+
 ## 🎉 Features
 
 ### 🎯 Core Functionality
@@ -32,32 +163,6 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
 - Chrome browser (version 102 or higher)
 - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
 - Access to VTF (vtf.t3live.com)
-
-### Install from Source (Recommended for Most Users)
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/simonplant/vtf-audio-extension.git
-   cd vtf-audio-extension
-   ```
-
-2. **Build the extension:**
-   ```bash
-   npm install
-   npm run build
-   ```
-
-3. **Load in Chrome:**
-   - Open Chrome and navigate to `chrome://extensions/`
-   - Enable "Developer mode" (toggle in top right)
-   - Click "Load unpacked"
-   - Select the `dist` directory (created by the build)
-
-4. **Configure API Key:**
-   - Click the extension icon in Chrome toolbar
-   - Click the settings (⚙️) button
-   - Enter your OpenAI API key
-   - Click "Save API Settings"
 
 #### Quick Install (Pre-built)
 If a release is available, download the `.zip` file from the [Releases](https://github.com/simonplant/vtf-audio-extension/releases) page and load it directly in Chrome.
