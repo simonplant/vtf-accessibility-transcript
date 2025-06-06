@@ -1,4 +1,4 @@
-
+// VTF Audio Extension - Service Worker\n// Handles audio buffering, transcription, and message coordination\n
 
 class VTFTranscriptionService {
   constructor() {
@@ -24,7 +24,7 @@ class VTFTranscriptionService {
     
     
     this.apiKey = null;
-    this.whisperEndpoint = 'https:
+    this.whisperEndpoint = 'https://api.openai.com/v1/audio/transcriptions';
     
     
     this.speakerMap = new Map([
@@ -434,7 +434,14 @@ class VTFTranscriptionService {
   
   
   broadcastTranscription(transcription) {
-    chrome.tabs.query({ url: '*:
+    chrome.tabs.query({ url: '<all_urls>' }, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { type: 'transcription', data: transcription });
+      }
+    });
+  }
+  
+  
   broadcastBufferStatus() {
     const status = {
       type: 'bufferStatus',
@@ -446,9 +453,14 @@ class VTFTranscriptionService {
         stats: this.stats
       }
     };
-    
-    
-    chrome.tabs.query({ url: '*:
+    chrome.tabs.query({ url: '<all_urls>' }, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, status);
+      }
+    });
+  }
+  
+  
   getTotalBufferSeconds() {
     let total = 0;
     this.userBuffers.forEach(buffer => {
