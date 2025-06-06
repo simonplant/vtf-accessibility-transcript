@@ -260,6 +260,45 @@ window.vtfExtension.debug()
 | Memory per Speaker | 5MB | 10MB |
 | Network Usage | 100KB/min | 200KB/min |
 
+## 💸 Estimated Monthly Billing & Usage Forecast
+
+### Whisper API Pricing
+- **Current Price:** $0.006 per audio minute (as of June 2024)
+- **Billing is based on the total duration of audio sent for transcription, not the length of the resulting text.**
+
+### How the Extension Uses the API
+- **Buffer Duration:** By default, the extension sends 1.5 seconds of audio per transcription request (configurable in settings).
+- **Silence Detection:** Only non-silent audio is sent, reducing unnecessary API calls.
+- **Mono, 16kHz:** Audio is optimized for Whisper's requirements, minimizing file size and cost.
+
+### Example Cost Calculations
+
+#### Typical Usage Scenario
+- **1 user, 8 hours/day, 22 days/month**
+- **Active audio (not silence):** ~6 hours/day (assuming breaks, silence, etc)
+- **Total audio per month:** 6 hours × 22 days = 132 hours = 7,920 minutes
+- **Estimated monthly cost:** 7,920 × $0.006 = **$47.52**
+
+#### Light Usage Scenario
+- **1 user, 2 hours/day, 20 days/month**
+- **Active audio:** ~1.5 hours/day
+- **Total audio per month:** 1.5 × 20 = 30 hours = 1,800 minutes
+- **Estimated monthly cost:** 1,800 × $0.006 = **$10.80**
+
+#### Multi-Speaker Scenario
+- **3 users, 4 hours/day, 20 days/month**
+- **Active audio per user:** ~3 hours/day
+- **Total audio per month:** 3 users × 3 hours × 20 days = 180 hours = 10,800 minutes
+- **Estimated monthly cost:** 10,800 × $0.006 = **$64.80**
+
+### How to Estimate Your Own Costs
+1. **Estimate total minutes of non-silent audio per month** (per user or total).
+2. **Multiply by $0.006** to get your monthly cost.
+
+> **Tip:** You can reduce costs by increasing the buffer duration (fewer API calls, longer context) or by adjusting silence detection sensitivity to avoid transcribing background noise.
+
+**Note:** Prices are subject to change. Always check [OpenAI's pricing page](https://openai.com/pricing) for the latest rates.
+
 ## 🤝 Contributing
 
 ### Development Setup
