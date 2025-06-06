@@ -227,21 +227,40 @@ export class VTFStateMonitor {
      * @private
      */
     findFunction(funcName, globalsFinder) {
-      // Check window
-      if (typeof window[funcName] === 'function') {
-        return { obj: window, func: window[funcName] };
+      // Check room component first (most functions are here)
+      if (globalsFinder.roomComponent && 
+          typeof globalsFinder.roomComponent[funcName] === 'function') {
+        return { 
+          obj: globalsFinder.roomComponent, 
+          func: globalsFinder.roomComponent[funcName] 
+        };
       }
       
       // Check mediaSoupService
       if (globalsFinder.mediaSoupService && 
           typeof globalsFinder.mediaSoupService[funcName] === 'function') {
-        return { obj: globalsFinder.mediaSoupService, func: globalsFinder.mediaSoupService[funcName] };
+        return { 
+          obj: globalsFinder.mediaSoupService, 
+          func: globalsFinder.mediaSoupService[funcName] 
+        };
       }
       
       // Check appService
       if (globalsFinder.appService && 
           typeof globalsFinder.appService[funcName] === 'function') {
-        return { obj: globalsFinder.appService, func: globalsFinder.appService[funcName] };
+        return { 
+          obj: globalsFinder.appService, 
+          func: globalsFinder.appService[funcName] 
+        };
+      }
+      
+      // Check mediaHandlerService if available
+      if (globalsFinder.appService?.mediaHandlerService &&
+          typeof globalsFinder.appService.mediaHandlerService[funcName] === 'function') {
+        return {
+          obj: globalsFinder.appService.mediaHandlerService,
+          func: globalsFinder.appService.mediaHandlerService[funcName]
+        };
       }
       
       return null;

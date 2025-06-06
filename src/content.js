@@ -84,6 +84,9 @@ class VTFAudioExtension {
       console.log('[VTF Extension] Phase 2: Initializing audio system...');
       await this.audioCapture.initialize();
       
+      // Pass globalsFinder reference to audio capture for volume access
+      this.audioCapture.globalsFinder = this.globalsFinder;
+      
       // Phase 3: Set up state monitoring
       console.log('[VTF Extension] Phase 3: Setting up state monitoring...');
       this.stateMonitor.startSync(this.globalsFinder, 1000);

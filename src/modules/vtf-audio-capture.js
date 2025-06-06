@@ -38,6 +38,7 @@ export class VTFAudioCapture {
     this.workletReady = false;
     this.captures = new Map();
     this.dataTransfer = null;
+    this.globalsFinder = null;
     
     // Statistics
     this.stats = {
@@ -421,18 +422,26 @@ export class VTFAudioCapture {
   }
   
   /**
-   * Get current VTF volume from various possible locations
+   * Get current VTF volume from globals
    * @returns {number} - Volume between 0.0 and 1.0
    */
   getVTFVolume() {
-    // Try multiple paths where VTF might store volume
-    const volume = window.globals?.audioVolume ?? 
-                  window.appService?.globals?.audioVolume ?? 
-                  window.vtf?.audioVolume ??
-                  1.0;
+    // Since we can't access globalsFinder here, we need to check if it was passed during init
+    if (this.globalsFinder?.globals?.audioVolume !== undefined) {
+      return Math.max(0, Math.min(1, this.globalsFinder.globals.audioVolume));
+    }
     
-    // Ensure valid range
-    return Math.max(0, Math.min(1, volume));
+    // Fallback - try to find it ourselves (not ideal but works)
+    try {
+      const webcam = document.getElementById('webcam');
+      if (webcam?.__ngContext__?.[8]?.appService?.globals?.audioVolume !== undefined) {
+        return Math.max(0, Math.min(1, webcam.__ngContext__[8].appService.globals.audioVolume));
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    
+    return 1.0; // Default to full volume
   }
   
   /**
