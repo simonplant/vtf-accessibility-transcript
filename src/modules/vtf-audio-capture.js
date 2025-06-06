@@ -1,27 +1,33 @@
+/**
+ * VTF Audio Capture Module
+ * 
+ * @property {VTFGlobalsFinder} globalsFinder - Must be set externally after construction
+ *                                              to access VTF global state (volume, etc)
+ */
 import { VTFAudioWorkletNode } from './vtf-audio-worklet-node.js';
 import { AudioDataTransfer } from './audio-data-transfer.js';
 
 export class VTFAudioCapture {
   constructor(options = {}) {
-    
     this.config = {
-      sampleRate: 16000,           
-      bufferSize: 4096,            
-      silenceThreshold: 0.001,     
-      latencyHint: 'interactive',  
-      maxCaptures: 50,             
+      sampleRate: 16000,
+      bufferSize: 4096,
+      silenceThreshold: 0.001,
+      latencyHint: 'interactive',
+      maxCaptures: 50,
       workletPath: 'audio-worklet.js',
       ...options
     };
-    
-    
     this.audioContext = null;
     this.workletReady = false;
     this.captures = new Map();
-    this.dataTransfer = new AudioDataTransfer();
+    if (typeof AudioDataTransfer === 'function') {
+      this.dataTransfer = new AudioDataTransfer();
+    } else {
+      this.dataTransfer = null;
+      console.warn('[Audio Capture] AudioDataTransfer is not available or stubbed. Audio transfer will be disabled.');
+    }
     this.globalsFinder = null;
-    
-    
     this.stats = {
       capturesStarted: 0,
       capturesStopped: 0,
@@ -29,8 +35,6 @@ export class VTFAudioCapture {
       fallbackUsed: 0,
       errors: 0
     };
-    
-    
     this.isInitialized = false;
     this.volumeSyncInterval = null;
     this.eventCallbacks = {
@@ -39,15 +43,37 @@ export class VTFAudioCapture {
       captureError: []
     };
   }
-  
-  
+
+  /**
+   * Register an event callback
+   * @param {string} event
+   * @param {Function} callback
+   */
   on(event, callback) {
     if (this.eventCallbacks[event]) {
       this.eventCallbacks[event].push(callback);
     }
   }
-  
-  
+
+  /**
+   * Remove an event callback
+   * @param {string} event
+   * @param {Function} callback
+   */
+  off(event, callback) {
+    if (this.eventCallbacks[event]) {
+      const index = this.eventCallbacks[event].indexOf(callback);
+      if (index > -1) {
+        this.eventCallbacks[event].splice(index, 1);
+      }
+    }
+  }
+
+  /**
+   * Emit an event
+   * @param {string} event
+   * @param  {...any} args
+   */
   emit(event, ...args) {
     if (this.eventCallbacks[event]) {
       this.eventCallbacks[event].forEach(callback => {
@@ -59,126 +85,90 @@ export class VTFAudioCapture {
       });
     }
   }
-  
-  
+
+  /**
+   * Initialize the audio capture system
+   * @async
+   * @throws {Error} If audio context creation fails
+   */
   async initialize() {
     if (this.isInitialized) {
-      
       return;
     }
-    
-    
     try {
-      
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
         sampleRate: this.config.sampleRate,
         latencyHint: this.config.latencyHint
       });
-      
-      
-      
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
-        
       }
-      
-      
       await this.loadAudioWorklet();
-      
-      
       this.startVolumeSync();
-      
       this.isInitialized = true;
-      
     } catch (error) {
       console.error('[Audio Capture] Initialization failed:', error);
       this.stats.errors++;
       throw error;
     }
   }
-  
-  
+
   async loadAudioWorklet() {
     try {
-      
       if (!this.audioContext.audioWorklet) {
-        
         this.workletReady = false;
         return;
       }
-      
-      
       let workletUrl = this.config.workletPath;
-      
-      
       if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
         workletUrl = chrome.runtime.getURL(`workers/${this.config.workletPath}`);
       }
-      
-      
-      
       await this.audioContext.audioWorklet.addModule(workletUrl);
-      
       this.workletReady = true;
-      
     } catch (error) {
       console.warn('[Audio Capture] AudioWorklet failed, will use ScriptProcessor fallback:', error);
       this.workletReady = false;
     }
   }
-  
-  
+
+  /**
+   * Capture audio from a VTF audio element
+   * @async
+   * @param {HTMLAudioElement} element - The audio element to capture
+   * @param {MediaStream} stream - The media stream to capture
+   * @param {string} userId - Unique identifier for the user
+   * @throws {Error} If capture setup fails
+   */
   async captureElement(element, stream, userId) {
-    
     if (!element || !(element instanceof HTMLAudioElement)) {
       throw new Error('[Audio Capture] Invalid audio element');
     }
-    
     if (!stream || !(stream instanceof MediaStream)) {
       throw new Error('[Audio Capture] Invalid MediaStream');
     }
-    
     if (!userId || typeof userId !== 'string') {
       throw new Error('[Audio Capture] Invalid userId');
     }
-    
-    
-    
     if (this.captures.has(userId)) {
-      
       return;
     }
-    
-    
     if (this.captures.size >= this.config.maxCaptures) {
       throw new Error(`[Audio Capture] Maximum captures (${this.config.maxCaptures}) reached`);
     }
-    
-    
     if (!this.isInitialized) {
       await this.initialize();
     }
-    
     try {
-      
       const audioTracks = stream.getAudioTracks();
       if (audioTracks.length === 0) {
         throw new Error('No audio tracks in stream');
       }
-      
       const track = audioTracks[0];
-      
-      
       const source = this.audioContext.createMediaStreamSource(stream);
-      
-      
       const gainNode = this.audioContext.createGain();
       gainNode.gain.value = this.getVTFVolume();
-      
-      
       let processor;
       let processorType;
-      
       if (this.workletReady) {
         processor = await this.createWorkletProcessor(userId);
         processorType = 'worklet';
@@ -188,13 +178,9 @@ export class VTFAudioCapture {
         processorType = 'script';
         this.stats.fallbackUsed++;
       }
-      
-      
       source.connect(gainNode);
       gainNode.connect(processor);
       processor.connect(this.audioContext.destination);
-      
-      
       const capture = {
         element,
         stream,
@@ -207,15 +193,10 @@ export class VTFAudioCapture {
         sampleCount: 0,
         chunkCount: 0
       };
-      
       this.captures.set(userId, capture);
       this.stats.capturesStarted++;
-      
-      
       this.setupTrackMonitoring(track, userId);
       this.emit('captureStarted', userId);
-      
-      
     } catch (error) {
       console.error(`[Audio Capture] Failed to capture ${userId}:`, error);
       this.stats.errors++;
@@ -223,37 +204,28 @@ export class VTFAudioCapture {
       throw error;
     }
   }
-  
-  
+
   async createWorkletProcessor(userId) {
     const workletNode = new VTFAudioWorkletNode(this.audioContext, userId, {
       bufferSize: this.config.bufferSize,
       silenceThreshold: this.config.silenceThreshold
     });
-    
     await workletNode.initialize();
-    
-    
     workletNode.onAudioData((data) => {
       this.handleAudioData(userId, data);
     });
-    
     return workletNode.node;
   }
-  
-  
+
   createScriptProcessor(userId) {
-    
+    console.warn('[Audio Capture] Using deprecated ScriptProcessorNode as fallback. AudioWorklet is recommended.');
     const processor = this.audioContext.createScriptProcessor(
       this.config.bufferSize,
-      1,  
-      1   
+      1,
+      1
     );
-    
     processor.onaudioprocess = (event) => {
       const inputData = event.inputBuffer.getChannelData(0);
-      
-      
       let maxSample = 0;
       for (let i = 0; i < inputData.length; i++) {
         const absSample = Math.abs(inputData[i]);
@@ -261,175 +233,132 @@ export class VTFAudioCapture {
           maxSample = absSample;
         }
       }
-      
-      
       if (maxSample < this.config.silenceThreshold) {
         return;
       }
-      
-      
       this.handleAudioData(userId, {
         samples: Array.from(inputData),
         timestamp: event.playbackTime || this.audioContext.currentTime,
         maxSample: maxSample
       });
     };
-    
     return processor;
   }
-  
-  
+
   handleAudioData(userId, data) {
     const capture = this.captures.get(userId);
     if (!capture) {
-      
       return;
     }
-    
-    
     capture.sampleCount += data.samples.length;
     capture.chunkCount++;
-    
-    
     if (this.dataTransfer) {
       this.dataTransfer.sendAudioData(userId, data.samples);
     }
-    
-    
     if (capture.chunkCount % 10 === 0) {
       const duration = (Date.now() - capture.startTime) / 1000;
       const avgChunkRate = capture.chunkCount / duration;
-      
     }
   }
-  
-  
+
   setupTrackMonitoring(track, userId) {
     track.onended = () => {
-      
       this.stopCapture(userId);
     };
-    
     track.onmute = () => {
-      
       const capture = this.captures.get(userId);
       if (capture) {
         capture.muted = true;
       }
     };
-    
     track.onunmute = () => {
-      
       const capture = this.captures.get(userId);
       if (capture) {
         capture.muted = false;
       }
     };
   }
-  
-  
+
+  /**
+   * Stop capturing audio for a specific user
+   * @async
+   * @param {string} userId - The user to stop capturing
+   * @returns {boolean} True if capture was stopped, false if not found
+   */
   async stopCapture(userId) {
     const capture = this.captures.get(userId);
     if (!capture) {
       return false;
     }
-    
-    
     try {
-      
       capture.source.disconnect();
       capture.gainNode.disconnect();
-      
       if (capture.processorType === 'worklet') {
-        
         const workletNodes = Array.from(this.captures.values())
           .filter(c => c.processorType === 'worklet' && c.processor === capture.processor);
-        
         if (workletNodes.length === 1) {
-          
           capture.processor.port.postMessage({ command: 'stop' });
         }
       }
-      
       capture.processor.disconnect();
-      
-      
       const duration = (Date.now() - capture.startTime) / 1000;
-      
-      
       if (capture.stream && typeof capture.stream.getTracks === 'function') {
         for (const track of capture.stream.getTracks()) {
           track.stop();
         }
       }
-      
     } catch (error) {
       console.error(`[Audio Capture] Error stopping ${userId}:`, error);
     }
-    
-    
     this.captures.delete(userId);
     this.stats.capturesStopped++;
     this.emit('captureStopped', userId);
-    
     return true;
   }
-  
-  
+
   async stopAll() {
-    
     const userIds = Array.from(this.captures.keys());
     let stopped = 0;
-    
     for (const userId of userIds) {
       if (await this.stopCapture(userId)) {
         stopped++;
       }
     }
-    
-    
     return stopped;
   }
-  
-  
+
   getVTFVolume() {
-    
+    // Try globalsFinder first
     if (this.globalsFinder?.globals?.audioVolume !== undefined) {
       return Math.max(0, Math.min(1, this.globalsFinder.globals.audioVolume));
     }
-    
-    
+    // Fallback: search through __ngContext__ array
     try {
       const webcam = document.getElementById('webcam');
-      if (webcam?.__ngContext__?.[8]?.appService?.globals?.audioVolume !== undefined) {
-        return Math.max(0, Math.min(1, webcam.__ngContext__[8].appService.globals.audioVolume));
+      if (webcam?.__ngContext__) {
+        for (let i = 0; i < webcam.__ngContext__.length; i++) {
+          const ctx = webcam.__ngContext__[i];
+          if (ctx?.appService?.globals?.audioVolume !== undefined) {
+            return Math.max(0, Math.min(1, ctx.appService.globals.audioVolume));
+          }
+        }
       }
-    } catch (e) {
-      
-    }
-    
-    return 1.0; 
+    } catch (e) {}
+    return 1.0;
   }
-  
-  
+
   updateVolume(volume) {
     const normalizedVolume = Math.max(0, Math.min(1, volume));
-    
-    
     for (const [userId, capture] of this.captures) {
       if (capture.gainNode) {
         capture.gainNode.gain.value = normalizedVolume;
       }
     }
   }
-  
-  
+
   startVolumeSync() {
-    
     this.volumeSyncInterval = setInterval(() => {
       const currentVolume = this.getVTFVolume();
-      
-      
       for (const capture of this.captures.values()) {
         if (capture.gainNode && Math.abs(capture.gainNode.gain.value - currentVolume) > 0.01) {
           capture.gainNode.gain.value = currentVolume;
@@ -437,21 +366,17 @@ export class VTFAudioCapture {
       }
     }, 1000);
   }
-  
-  
+
   getCaptureCount() {
     return this.captures.size;
   }
-  
-  
+
   getCaptureStats(userId) {
     const capture = this.captures.get(userId);
     if (!capture) {
       return null;
     }
-    
     const duration = (Date.now() - capture.startTime) / 1000;
-    
     return {
       userId,
       processorType: capture.processorType,
@@ -463,13 +388,11 @@ export class VTFAudioCapture {
       muted: capture.track.muted || capture.muted || false
     };
   }
-  
-  
+
   getAllStats() {
-    const captureStats = Array.from(this.captures.keys()).map(userId => 
+    const captureStats = Array.from(this.captures.keys()).map(userId =>
       this.getCaptureStats(userId)
     );
-    
     return {
       ...this.stats,
       contextState: this.audioContext?.state || 'not-created',
@@ -480,8 +403,7 @@ export class VTFAudioCapture {
       currentVolume: this.getVTFVolume()
     };
   }
-  
-  
+
   debug() {
     const captureDebug = {};
     for (const [userId, capture] of this.captures) {
@@ -505,7 +427,6 @@ export class VTFAudioCapture {
         }
       };
     }
-    
     return {
       isInitialized: this.isInitialized,
       config: { ...this.config },
@@ -519,31 +440,34 @@ export class VTFAudioCapture {
       }
     };
   }
-  
-  
-  destroy() {
-    
-    
-    this.stopAll();
-    
-    
+
+  /**
+   * Destroy the audio capture system and clean up resources
+   * @async
+   */
+  async destroy() {
+    console.log('[Audio Capture] Starting destroy...');
+    await this.stopAll();
     if (this.volumeSyncInterval) {
       clearInterval(this.volumeSyncInterval);
       this.volumeSyncInterval = null;
     }
-    
-    
     if (this.audioContext && this.audioContext.state !== 'closed') {
-      this.audioContext.close();
-      
+      try {
+        await this.audioContext.close();
+        console.log('[Audio Capture] Audio context closed');
+      } catch (error) {
+        console.error('[Audio Capture] Error closing audio context:', error);
+      }
     }
-    
-    
+    for (const event in this.eventCallbacks) {
+      this.eventCallbacks[event] = [];
+    }
     this.audioContext = null;
     this.dataTransfer = null;
+    this.globalsFinder = null;
     this.isInitialized = false;
-    
-    
+    console.log('[Audio Capture] Destroyed');
   }
 }
 

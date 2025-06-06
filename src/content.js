@@ -732,32 +732,29 @@ class VTFAudioExtension {
   
   
   destroy() {
-    
-    
     this.cleanup();
-    
-    
     this.audioCapture.destroy();
     this.streamMonitor.destroy();
     this.stateMonitor.destroy();
     this.globalsFinder.destroy();
-    
-    
-    this.isInitialized = false;
-    
     if (this._notificationElements) {
       for (const el of this._notificationElements) {
-        if (el.parentNode) el.parentNode.removeChild(el);
+        if (el && el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
       }
       this._notificationElements = [];
     }
-    
     if (this._notificationHandlers) {
       for (const {el, handler} of this._notificationHandlers) {
-        el.removeEventListener('click', handler);
+        if (el && handler) {
+          el.removeEventListener('click', handler);
+        }
       }
       this._notificationHandlers = [];
     }
+    this.isInitialized = false;
+    console.log('[VTF Extension] Destroyed');
   }
   
   

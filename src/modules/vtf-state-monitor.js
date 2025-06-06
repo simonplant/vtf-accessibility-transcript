@@ -1,5 +1,3 @@
-
-
 export class VTFStateMonitor {
     constructor(options = {}) {
       
@@ -446,18 +444,15 @@ export class VTFStateMonitor {
     
     
     destroy() {
-      
       this.isDestroyed = true;
-      
-      
-      this.stopSync();
-      
-      
+      if (this.syncInterval) {
+        clearInterval(this.syncInterval);
+        this.syncInterval = null;
+      }
+      this.unhookVTFFunctions();
       for (const event in this.callbacks) {
         this.callbacks[event] = [];
       }
-      
-      
       this.globalsFinder = null;
       this.lastKnownState.talkingUsers.clear();
     }

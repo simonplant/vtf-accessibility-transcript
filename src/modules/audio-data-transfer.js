@@ -109,28 +109,24 @@ export class AudioDataTransfer {
     
     sendChunk(userId, chunk, retryCount = 0) {
       try {
-        
         if (!this.extensionValid || !chrome.runtime?.id) {
           console.error('[Data Transfer] Extension context invalid');
           this.queueFailedChunk(userId, chunk);
           return;
         }
-        
         const message = {
           type: 'audioChunk',
           userId,
-          chunk: Array.from(chunk), 
+          chunk: Array.from(chunk),
           timestamp: Date.now(),
           sampleRate: 16000,
           sequence: this.sequenceNumber++
         };
-        
         chrome.runtime.sendMessage(message, response => {
           if (chrome.runtime.lastError) {
             console.error('[Data Transfer] Send error:', chrome.runtime.lastError);
             this.handleSendError(userId, chunk, retryCount);
           } else {
-            
             this.handleSendSuccess(userId, chunk);
           }
         });
@@ -468,25 +464,21 @@ export class AudioDataTransfer {
     
     destroy() {
       try {
-        
-        
+        // Clear all intervals FIRST
         if (this.validityCheckInterval) {
           clearInterval(this.validityCheckInterval);
+          this.validityCheckInterval = null;
         }
-        
         if (this.cleanupInterval) {
           clearInterval(this.cleanupInterval);
+          this.cleanupInterval = null;
         }
-        
-        
+        // Then flush and clean up
         this.flushAll();
-        
-        
         this.pendingChunks.clear();
         this.userStats.clear();
         this.failedChunks = [];
-        
-        
+        console.log('[Data Transfer] Destroyed');
       } catch (error) {
         console.error('[Data Transfer] Error destroying instance:', error);
         this.transferStats.errors++;
