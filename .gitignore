@@ -9,3 +9,5 @@ node_modules/
 TREE-expected.txt
 TREE.txt
 package-lock.json
+*/.DS_Store
+src/.DS_Store

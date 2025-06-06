@@ -40,8 +40,7 @@
       "default_popup": "popup.html",
       "default_icon": {
         "16": "icons/icon16.png",
-        "24": "icons/icon24.png",
-        "32": "icons/icon32.png"
+        "48": "icons/icon49.png"
       },
       "default_title": "VTF Audio Transcription"
     },
