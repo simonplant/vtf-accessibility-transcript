@@ -6,3 +6,5 @@
 test/results/
 dist/
 node_modules/
+TREE-expected.txt
+TREE-expected.txt
