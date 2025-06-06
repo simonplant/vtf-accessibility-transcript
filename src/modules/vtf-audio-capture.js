@@ -9,7 +9,7 @@
  * @module vtf-audio-capture
  */
 
-// Import AudioWorklet controller
+// Intentional exception: Direct import of VTFAudioWorkletNode is required for worklet instantiation and is documented as an exception to strict decoupling.
 import { VTFAudioWorkletNode } from './vtf-audio-worklet-node.js';
 
 // Temporary stub for AudioDataTransfer (will be implemented later)
@@ -360,7 +360,7 @@ export class VTFAudioCapture {
    * @param {string} userId - The user to stop capturing
    * @returns {boolean} - True if capture was active and stopped
    */
-  stopCapture(userId) {
+  async stopCapture(userId) {
     const capture = this.captures.get(userId);
     if (!capture) {
       return false;
@@ -390,6 +390,13 @@ export class VTFAudioCapture {
       const duration = (Date.now() - capture.startTime) / 1000;
       console.log(`[Audio Capture] Stopped ${userId}: ${capture.chunkCount} chunks over ${duration.toFixed(1)}s`);
       
+      // Stop all tracks in the MediaStream
+      if (capture.stream && typeof capture.stream.getTracks === 'function') {
+        for (const track of capture.stream.getTracks()) {
+          track.stop();
+        }
+      }
+      
     } catch (error) {
       console.error(`[Audio Capture] Error stopping ${userId}:`, error);
     }
@@ -405,14 +412,14 @@ export class VTFAudioCapture {
    * Stop all active captures
    * @returns {number} - Number of captures stopped
    */
-  stopAll() {
+  async stopAll() {
     console.log('[Audio Capture] Stopping all captures');
     
     const userIds = Array.from(this.captures.keys());
     let stopped = 0;
     
     for (const userId of userIds) {
-      if (this.stopCapture(userId)) {
+      if (await this.stopCapture(userId)) {
         stopped++;
       }
     }

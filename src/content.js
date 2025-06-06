@@ -157,15 +157,13 @@ class VTFAudioExtension {
    */
   setupEventHandlers() {
     // Volume changes from VTF
-    this.stateMonitor.on('onVolumeChanged', (newVolume, oldVolume) => {
-      console.log(`[VTF Extension] Volume changed: ${oldVolume} → ${newVolume}`);
-      this.audioCapture.updateVolume(newVolume);
-      
-      // Update any UI elements
-      this.sendMessage({
-        type: 'volumeChanged',
-        volume: newVolume
-      });
+    this.stateMonitor.on('onVolumeChanged', async (newVolume, oldVolume) => {
+      try {
+        await this.audioCapture.updateVolume(newVolume);
+        this.sendMessage({ type: 'volumeChanged', volume: newVolume });
+      } catch (err) {
+        this.handleExtensionError(err);
+      }
     });
     
     // Session state changes
@@ -378,6 +376,12 @@ class VTFAudioExtension {
     
     // Remove element reference
     this.audioElements.delete(userId);
+    
+    if (element.srcObject && typeof element.srcObject.getTracks === 'function') {
+      for (const track of element.srcObject.getTracks()) {
+        track.stop();
+      }
+    }
   }
   
   /**
@@ -662,9 +666,13 @@ class VTFAudioExtension {
     document.body.appendChild(display);
     
     // Close button handler
-    display.querySelector('.vtf-transcript-close').addEventListener('click', () => {
-      display.remove();
-    });
+    const closeHandler = () => { display.remove(); };
+    display.querySelector('.vtf-transcript-close').addEventListener('click', closeHandler);
+    
+    this._notificationElements = this._notificationElements || [];
+    this._notificationHandlers = this._notificationHandlers || [];
+    this._notificationElements.push(display);
+    this._notificationHandlers.push({el: display.querySelector('.vtf-transcript-close'), handler: closeHandler});
   }
   
   /**
@@ -676,6 +684,9 @@ class VTFAudioExtension {
     notification.textContent = message;
     
     document.body.appendChild(notification);
+    
+    this._notificationElements = this._notificationElements || [];
+    this._notificationElements.push(notification);
     
     setTimeout(() => {
       notification.classList.add('fade-out');
@@ -823,6 +834,20 @@ class VTFAudioExtension {
     
     // Clear references
     this.isInitialized = false;
+    
+    if (this._notificationElements) {
+      for (const el of this._notificationElements) {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }
+      this._notificationElements = [];
+    }
+    
+    if (this._notificationHandlers) {
+      for (const {el, handler} of this._notificationHandlers) {
+        el.removeEventListener('click', handler);
+      }
+      this._notificationHandlers = [];
+    }
   }
   
   /**

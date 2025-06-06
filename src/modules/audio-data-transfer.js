@@ -127,23 +127,23 @@ export class AudioDataTransfer {
      * @param {number} retryCount - Current retry attempt
      */
     sendChunk(userId, chunk, retryCount = 0) {
-      // Check extension validity
-      if (!this.extensionValid || !chrome.runtime?.id) {
-        console.error('[Data Transfer] Extension context invalid');
-        this.queueFailedChunk(userId, chunk);
-        return;
-      }
-      
-      const message = {
-        type: 'audioChunk',
-        userId,
-        chunk: Array.from(chunk), // Ensure it's a regular array
-        timestamp: Date.now(),
-        sampleRate: 16000,
-        sequence: this.sequenceNumber++
-      };
-      
       try {
+        // Check extension validity
+        if (!this.extensionValid || !chrome.runtime?.id) {
+          console.error('[Data Transfer] Extension context invalid');
+          this.queueFailedChunk(userId, chunk);
+          return;
+        }
+        
+        const message = {
+          type: 'audioChunk',
+          userId,
+          chunk: Array.from(chunk), // Ensure it's a regular array
+          timestamp: Date.now(),
+          sampleRate: 16000,
+          sequence: this.sequenceNumber++
+        };
+        
         chrome.runtime.sendMessage(message, response => {
           if (chrome.runtime.lastError) {
             console.error('[Data Transfer] Send error:', chrome.runtime.lastError);
@@ -164,14 +164,20 @@ export class AudioDataTransfer {
      * @private
      */
     handleSendSuccess(userId, chunk) {
-      this.transferStats.chunksSent++;
-      this.transferStats.bytesSent += chunk.length * 2;
-      
-      const userStat = this.userStats.get(userId);
-      if (userStat) {
-        userStat.chunksSent++;
-        userStat.bytesSent += chunk.length * 2;
-        userStat.lastSendTime = Date.now();
+      try {
+        this.transferStats.chunksSent++;
+        this.transferStats.bytesSent += chunk.length * 2;
+        
+        const userStat = this.userStats.get(userId);
+        if (userStat) {
+          userStat.chunksSent++;
+          userStat.bytesSent += chunk.length * 2;
+          userStat.lastSendTime = Date.now();
+        }
+      } catch (error) {
+        console.error('[Data Transfer] Error handling send success:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
       }
     }
     
@@ -180,24 +186,30 @@ export class AudioDataTransfer {
      * @private
      */
     handleSendError(userId, chunk, retryCount) {
-      this.transferStats.errors++;
-      
-      const userStat = this.userStats.get(userId);
-      if (userStat) {
-        userStat.errors++;
-      }
-      
-      // Retry logic
-      if (retryCount < this.config.retryAttempts) {
-        this.transferStats.retries++;
-        console.log(`[Data Transfer] Retrying chunk for ${userId} (attempt ${retryCount + 1})`);
+      try {
+        this.transferStats.errors++;
         
-        setTimeout(() => {
-          this.sendChunk(userId, chunk, retryCount + 1);
-        }, this.config.retryDelay * (retryCount + 1));
-      } else {
-        console.error(`[Data Transfer] Failed to send chunk for ${userId} after ${retryCount} retries`);
-        this.queueFailedChunk(userId, chunk);
+        const userStat = this.userStats.get(userId);
+        if (userStat) {
+          userStat.errors++;
+        }
+        
+        // Retry logic
+        if (retryCount < this.config.retryAttempts) {
+          this.transferStats.retries++;
+          console.log(`[Data Transfer] Retrying chunk for ${userId} (attempt ${retryCount + 1})`);
+          
+          setTimeout(() => {
+            this.sendChunk(userId, chunk, retryCount + 1);
+          }, this.config.retryDelay * (retryCount + 1));
+        } else {
+          console.error(`[Data Transfer] Failed to send chunk for ${userId} after ${retryCount} retries`);
+          this.queueFailedChunk(userId, chunk);
+        }
+      } catch (error) {
+        console.error('[Data Transfer] Error handling send error:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
       }
     }
     
@@ -206,16 +218,22 @@ export class AudioDataTransfer {
      * @private
      */
     queueFailedChunk(userId, chunk) {
-      this.failedChunks.push({
-        userId,
-        chunk,
-        timestamp: Date.now()
-      });
-      
-      // Limit failed chunks queue
-      if (this.failedChunks.length > 100) {
-        const dropped = this.failedChunks.splice(0, 50);
-        console.warn(`[Data Transfer] Dropped ${dropped.length} failed chunks`);
+      try {
+        this.failedChunks.push({
+          userId,
+          chunk,
+          timestamp: Date.now()
+        });
+        
+        // Limit failed chunks queue
+        if (this.failedChunks.length > 100) {
+          const dropped = this.failedChunks.splice(0, 50);
+          console.warn(`[Data Transfer] Dropped ${dropped.length} failed chunks`);
+        }
+      } catch (error) {
+        console.error('[Data Transfer] Error queueing failed chunk:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
       }
     }
     
@@ -225,20 +243,27 @@ export class AudioDataTransfer {
      * @returns {Int16Array} - Output samples [-32768, 32767]
      */
     float32ToInt16(float32Array) {
-      const int16Array = new Int16Array(float32Array.length);
-      
-      for (let i = 0; i < float32Array.length; i++) {
-        // Clamp to [-1, 1]
-        const clamped = Math.max(-1, Math.min(1, float32Array[i]));
+      try {
+        const int16Array = new Int16Array(float32Array.length);
         
-        // Convert to Int16 range
-        // Note: We use different scaling for negative vs positive to avoid overflow
-        int16Array[i] = clamped < 0 
-          ? Math.floor(clamped * 0x8000)  // -32768
-          : Math.floor(clamped * 0x7FFF); // 32767
+        for (let i = 0; i < float32Array.length; i++) {
+          // Clamp to [-1, 1]
+          const clamped = Math.max(-1, Math.min(1, float32Array[i]));
+          
+          // Convert to Int16 range
+          // Note: We use different scaling for negative vs positive to avoid overflow
+          int16Array[i] = clamped < 0 
+            ? Math.floor(clamped * 0x8000)  // -32768
+            : Math.floor(clamped * 0x7FFF); // 32767
+        }
+        
+        return int16Array;
+      } catch (error) {
+        console.error('[Data Transfer] Error converting float32 to int16:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
+        return null;
       }
-      
-      return int16Array;
     }
     
     /**
@@ -247,25 +272,32 @@ export class AudioDataTransfer {
      * @returns {boolean} - True if data was flushed
      */
     flush(userId) {
-      const pending = this.pendingChunks.get(userId);
-      if (!pending || pending.length === 0) {
-        return false;
-      }
-      
-      console.log(`[Data Transfer] Flushing ${pending.length} samples for ${userId}`);
-      
-      // Send whatever we have, even if incomplete chunk
-      if (pending.length > 0) {
-        // Pad to chunk size if needed
-        while (pending.length < this.CHUNK_SIZE) {
-          pending.push(0);
+      try {
+        const pending = this.pendingChunks.get(userId);
+        if (!pending || pending.length === 0) {
+          return false;
         }
         
-        const chunk = pending.splice(0, this.CHUNK_SIZE);
-        this.sendChunk(userId, chunk);
+        console.log(`[Data Transfer] Flushing ${pending.length} samples for ${userId}`);
+        
+        // Send whatever we have, even if incomplete chunk
+        if (pending.length > 0) {
+          // Pad to chunk size if needed
+          while (pending.length < this.CHUNK_SIZE) {
+            pending.push(0);
+          }
+          
+          const chunk = pending.splice(0, this.CHUNK_SIZE);
+          this.sendChunk(userId, chunk);
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('[Data Transfer] Error flushing data:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
+        return false;
       }
-      
-      return true;
     }
     
     /**
@@ -273,25 +305,32 @@ export class AudioDataTransfer {
      * @returns {number} - Number of users flushed
      */
     flushAll() {
-      console.log('[Data Transfer] Flushing all pending data');
-      
-      let flushedCount = 0;
-      for (const userId of this.pendingChunks.keys()) {
-        if (this.flush(userId)) {
-          flushedCount++;
+      try {
+        console.log('[Data Transfer] Flushing all pending data');
+        
+        let flushedCount = 0;
+        for (const userId of this.pendingChunks.keys()) {
+          if (this.flush(userId)) {
+            flushedCount++;
+          }
         }
+        
+        // Also retry failed chunks
+        const failedToRetry = [...this.failedChunks];
+        this.failedChunks = [];
+        
+        failedToRetry.forEach(({ userId, chunk }) => {
+          console.log(`[Data Transfer] Retrying failed chunk for ${userId}`);
+          this.sendChunk(userId, chunk);
+        });
+        
+        return flushedCount;
+      } catch (error) {
+        console.error('[Data Transfer] Error flushing all data:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
+        return 0;
       }
-      
-      // Also retry failed chunks
-      const failedToRetry = [...this.failedChunks];
-      this.failedChunks = [];
-      
-      failedToRetry.forEach(({ userId, chunk }) => {
-        console.log(`[Data Transfer] Retrying failed chunk for ${userId}`);
-        this.sendChunk(userId, chunk);
-      });
-      
-      return flushedCount;
     }
     
     /**
@@ -299,12 +338,18 @@ export class AudioDataTransfer {
      * @param {number} size - New chunk size in samples
      */
     setChunkSize(size) {
-      if (size < 1024 || size > 65536) {
-        throw new Error('Chunk size must be between 1024 and 65536');
+      try {
+        if (size < 1024 || size > 65536) {
+          throw new Error('Chunk size must be between 1024 and 65536');
+        }
+        
+        console.log(`[Data Transfer] Changing chunk size from ${this.CHUNK_SIZE} to ${size}`);
+        this.CHUNK_SIZE = size;
+      } catch (error) {
+        console.error('[Data Transfer] Error setting chunk size:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
       }
-      
-      console.log(`[Data Transfer] Changing chunk size from ${this.CHUNK_SIZE} to ${size}`);
-      this.CHUNK_SIZE = size;
     }
     
     /**
@@ -312,11 +357,17 @@ export class AudioDataTransfer {
      * @param {number} size - Max size in samples
      */
     setMaxPendingSize(size) {
-      if (size < this.CHUNK_SIZE) {
-        throw new Error('Max pending size must be at least one chunk size');
+      try {
+        if (size < this.CHUNK_SIZE) {
+          throw new Error('Max pending size must be at least one chunk size');
+        }
+        
+        this.config.maxPendingSize = size;
+      } catch (error) {
+        console.error('[Data Transfer] Error setting max pending size:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
       }
-      
-      this.config.maxPendingSize = size;
     }
     
     /**
@@ -324,23 +375,30 @@ export class AudioDataTransfer {
      * @returns {Object} - Statistics object
      */
     getStats() {
-      const pendingInfo = Array.from(this.pendingChunks.entries()).map(([userId, pending]) => ({
-        userId,
-        pendingSamples: pending.length,
-        pendingBytes: pending.length * 2
-      }));
-      
-      const totalPendingBytes = pendingInfo.reduce((sum, info) => sum + info.pendingBytes, 0);
-      
-      return {
-        ...this.transferStats,
-        pendingUsers: this.pendingChunks.size,
-        pendingBytes: totalPendingBytes,
-        failedChunks: this.failedChunks.length,
-        sequenceNumber: this.sequenceNumber,
-        extensionValid: this.extensionValid,
-        pendingDetails: pendingInfo
-      };
+      try {
+        const pendingInfo = Array.from(this.pendingChunks.entries()).map(([userId, pending]) => ({
+          userId,
+          pendingSamples: pending.length,
+          pendingBytes: pending.length * 2
+        }));
+        
+        const totalPendingBytes = pendingInfo.reduce((sum, info) => sum + info.pendingBytes, 0);
+        
+        return {
+          ...this.transferStats,
+          pendingUsers: this.pendingChunks.size,
+          pendingBytes: totalPendingBytes,
+          failedChunks: this.failedChunks.length,
+          sequenceNumber: this.sequenceNumber,
+          extensionValid: this.extensionValid,
+          pendingDetails: pendingInfo
+        };
+      } catch (error) {
+        console.error('[Data Transfer] Error getting stats:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
+        return null;
+      }
     }
     
     /**
@@ -349,38 +407,51 @@ export class AudioDataTransfer {
      * @returns {Object|null} - User statistics
      */
     getUserStats(userId) {
-      const userStat = this.userStats.get(userId);
-      if (!userStat) {
+      try {
+        const userStat = this.userStats.get(userId);
+        if (!userStat) {
+          return null;
+        }
+        
+        const pending = this.pendingChunks.get(userId) || [];
+        
+        return {
+          ...userStat,
+          pendingSamples: pending.length,
+          pendingBytes: pending.length * 2,
+          secondsSent: (userStat.bytesSent / 2) / 16000
+        };
+      } catch (error) {
+        console.error('[Data Transfer] Error getting user stats:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
         return null;
       }
-      
-      const pending = this.pendingChunks.get(userId) || [];
-      
-      return {
-        ...userStat,
-        pendingSamples: pending.length,
-        pendingBytes: pending.length * 2,
-        secondsSent: (userStat.bytesSent / 2) / 16000
-      };
     }
     
     /**
      * Reset statistics
      */
     resetStats() {
-      console.log('[Data Transfer] Resetting statistics');
-      
-      this.transferStats = {
-        bytesSent: 0,
-        chunksSent: 0,
-        errors: 0,
-        retries: 0,
-        conversions: 0,
-        droppedSamples: 0
-      };
-      
-      this.userStats.clear();
-      this.sequenceNumber = 0;
+      try {
+        console.log('[Data Transfer] Resetting statistics');
+        
+        this.transferStats = {
+          bytesSent: 0,
+          chunksSent: 0,
+          errors: 0,
+          retries: 0,
+          conversions: 0,
+          droppedSamples: 0
+        };
+        
+        this.userStats.clear();
+        this.sequenceNumber = 0;
+      } catch (error) {
+        console.error('[Data Transfer] Error resetting stats:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
+      }
     }
     
     /**
@@ -404,20 +475,26 @@ export class AudioDataTransfer {
      * @private
      */
     setupPeriodicTasks() {
-      // Check extension validity every 5 seconds
-      this.validityCheckInterval = setInterval(() => {
-        this.checkExtensionValidity();
-      }, 5000);
-      
-      // Clean up old failed chunks every minute
-      this.cleanupInterval = setInterval(() => {
-        const now = Date.now();
-        const maxAge = 60000; // 1 minute
+      try {
+        // Check extension validity every 5 seconds
+        this.validityCheckInterval = setInterval(() => {
+          this.checkExtensionValidity();
+        }, 5000);
         
-        this.failedChunks = this.failedChunks.filter(item => {
-          return now - item.timestamp < maxAge;
-        });
-      }, 60000);
+        // Clean up old failed chunks every minute
+        this.cleanupInterval = setInterval(() => {
+          const now = Date.now();
+          const maxAge = 60000; // 1 minute
+          
+          this.failedChunks = this.failedChunks.filter(item => {
+            return now - item.timestamp < maxAge;
+          });
+        }, 60000);
+      } catch (error) {
+        console.error('[Data Transfer] Error setting up periodic tasks:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
+      }
     }
     
     /**
@@ -425,53 +502,66 @@ export class AudioDataTransfer {
      * @returns {Object} - Debug state
      */
     debug() {
-      const userDebug = {};
-      for (const [userId, pending] of this.pendingChunks) {
-        const stats = this.userStats.get(userId);
-        userDebug[userId] = {
-          pendingSamples: pending.length,
-          stats: stats || {}
+      try {
+        const userDebug = {};
+        for (const [userId, pending] of this.pendingChunks) {
+          const stats = this.userStats.get(userId);
+          userDebug[userId] = {
+            pendingSamples: pending.length,
+            stats: stats || {}
+          };
+        }
+        
+        return {
+          config: { ...this.config },
+          chunkSize: this.CHUNK_SIZE,
+          stats: this.getStats(),
+          users: userDebug,
+          extensionValid: this.extensionValid,
+          lastError: this.lastError ? this.lastError.message : null,
+          failedChunksCount: this.failedChunks.length,
+          oldestFailedChunk: this.failedChunks[0] 
+            ? new Date(this.failedChunks[0].timestamp).toISOString() 
+            : null
         };
+      } catch (error) {
+        console.error('[Data Transfer] Error getting debug info:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
+        return null;
       }
-      
-      return {
-        config: { ...this.config },
-        chunkSize: this.CHUNK_SIZE,
-        stats: this.getStats(),
-        users: userDebug,
-        extensionValid: this.extensionValid,
-        lastError: this.lastError ? this.lastError.message : null,
-        failedChunksCount: this.failedChunks.length,
-        oldestFailedChunk: this.failedChunks[0] 
-          ? new Date(this.failedChunks[0].timestamp).toISOString() 
-          : null
-      };
     }
     
     /**
      * Clean up and destroy
      */
     destroy() {
-      console.log('[Data Transfer] Destroying instance');
-      
-      // Clear intervals
-      if (this.validityCheckInterval) {
-        clearInterval(this.validityCheckInterval);
+      try {
+        console.log('[Data Transfer] Destroying instance');
+        
+        // Clear intervals
+        if (this.validityCheckInterval) {
+          clearInterval(this.validityCheckInterval);
+        }
+        
+        if (this.cleanupInterval) {
+          clearInterval(this.cleanupInterval);
+        }
+        
+        // Flush all pending data
+        this.flushAll();
+        
+        // Clear data structures
+        this.pendingChunks.clear();
+        this.userStats.clear();
+        this.failedChunks = [];
+        
+        console.log('[Data Transfer] Destroyed successfully');
+      } catch (error) {
+        console.error('[Data Transfer] Error destroying instance:', error);
+        this.transferStats.errors++;
+        this.lastError = error;
       }
-      
-      if (this.cleanupInterval) {
-        clearInterval(this.cleanupInterval);
-      }
-      
-      // Flush all pending data
-      this.flushAll();
-      
-      // Clear data structures
-      this.pendingChunks.clear();
-      this.userStats.clear();
-      this.failedChunks = [];
-      
-      console.log('[Data Transfer] Destroyed successfully');
     }
   }
   
