@@ -8,13 +8,16 @@
       "test:unit": "node scripts/test.js unit",
       "test:integration": "node scripts/test.js integration",
       "build": "node scripts/build.js",
+      "build:prod": "NODE_ENV=production node scripts/build.js",
       "build:legacy": "node scripts/build.js --legacy",
+      "watch": "node scripts/build.js --watch",
       "lint": "eslint src/",
       "migrate": "node scripts/migrate-settings.js"
     },
     "devDependencies": {
       "eslint": "^8.0.0",
-      "chrome-types": "^0.1.0"
+      "chrome-types": "^0.1.0",
+      "esbuild": "^0.19.0"
     },
     "engines": {
       "node": ">=18.0.0"
