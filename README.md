@@ -353,3 +353,35 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 **Disclaimer**: This extension is an independent project and is not affiliated with, endorsed by, or associated with T3 Trading Group, Virtual Trading Floor (VTF), or T3 Live. All trademarks belong to their respective owners.
+
+## ⚠️ Important: Bundling Content Script for Chrome Extension
+
+Chrome extensions (Manifest V3) do **not** support ES6 module imports in content scripts. You must bundle your content script and its modules before loading or publishing the extension.
+
+### Quick Start: Bundle with esbuild
+
+1. **Install esbuild (if not already):**
+   ```bash
+   npm install --save-dev esbuild
+   ```
+2. **Bundle the content script:**
+   ```bash
+   node scripts/build-content.js
+   ```
+   This will generate `src/content-bundle.js` from your modular `src/content.js`.
+
+3. **Ensure your `manifest.json` uses the bundled file:**
+   ```json
+   {
+     "content_scripts": [{
+       "matches": ["*://vtf.t3live.com/*"],
+       "js": ["content-bundle.js"],
+       "run_at": "document_idle",
+       "all_frames": false
+     }]
+   }
+   ```
+
+> **You must re-bundle every time you change your content script or its modules!**
+
+---

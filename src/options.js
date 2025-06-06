@@ -496,7 +496,7 @@ class VTFOptions {
       const status = await this.sendMessage({ type: 'getStatus' });
       
       const exportData = {
-        version: '2.0.0',
+        version: '0.5.0',
         exportDate: new Date().toISOString(),
         settings: allSettings,
         transcriptions: transcriptions?.transcriptions || [],

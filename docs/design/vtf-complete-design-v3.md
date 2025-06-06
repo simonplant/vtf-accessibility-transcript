@@ -1,4 +1,4 @@
-# VTF Audio Extension - Complete Design Document v3.0
+# VTF Audio Extension - Complete Design Document v0.5.0
 
 ## Executive Summary
 

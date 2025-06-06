@@ -6,7 +6,7 @@ This document provides a comprehensive technical specification of the Virtual Tr
 
 **Last Updated**: December 2024  
 **Analysis Date**: June 2025 build  
-**Document Version**: 2.0
+**Document Version**: 0.5.0
 
 ## Table of Contents
 
@@ -1015,8 +1015,8 @@ this.mediaSoupService.device     // MediaSoup device instance
 
 ## Version History
 
-- **v1.0** (2024-12): Initial specification based on reverse engineering
-- **v2.0** (2024-12): Enhanced with detailed code analysis and implementation patterns
+- **v0.4.0** (2025-05): Initial specification based on reverse engineering
+- **v0.5.0** (2024-05): Enhanced with detailed code analysis and implementation patterns
 - Analysis based on VTF build from June 2025
 
 ---

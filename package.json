@@ -1,6 +1,6 @@
 {
     "name": "vtf-audio-extension",
-    "version": "2.0.0",
+    "version": "0.5.0",
     "description": "VTF Audio Transcription Chrome Extension",
     "private": true,
     "scripts": {

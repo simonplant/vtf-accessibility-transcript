@@ -73,7 +73,7 @@ When asked "what should I work on next?", check dependencies and recommend the n
 
 #### Implement VTF Foundation Module: [MODULE_NAME]
 
-Implement the [MODULE_NAME] module according to the VTF Audio Extension Design Document v3.0.
+Implement the [MODULE_NAME] module according to the VTF Audio Extension Design Document v0.5.0.
 
 ##### Module: [MODULE_NAME]
 File: `src/modules/[filename].js`

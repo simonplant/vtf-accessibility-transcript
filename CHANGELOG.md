@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.0.0-alpha] - Unreleased
+## [0.5.0] - 2025-06-05
 
 ### Changed
 - Complete refactor to eliminate srcObject monkey-patching
@@ -18,7 +18,7 @@
 - inject.js (functionality merged into content.js)
 - ScriptProcessorNode (moved to fallback only)
 
-## [1.1.0] - 2024-12-01
+## [0.4.0] - 2025-05-20
 
 ### Current Stable Release
 - Basic audio capture working
