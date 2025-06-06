@@ -12,8 +12,9 @@
         "package": "NODE_ENV=production node scripts/build.js --package",
         "clean": "node scripts/clean.js",
         "test": "node scripts/test.js",
-        "lint": "echo 'No linter configured'",
-        "check": "node scripts/check-env.js"
+        "lint": "eslint . || echo 'No linter configured'",
+        "check": "node scripts/check-env.js",
+        "all": "npm run check && npm run clean && npm install && npm run postinstall && npm run build && npm run test"
     },
     "devDependencies": {
         "esbuild": "^0.19.0",

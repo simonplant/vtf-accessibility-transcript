@@ -5,6 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const esbuild = require('esbuild');
 const { resolve, log, showHeader } = require('./shared');
+const fsSync = require('fs');
 
 async function clean() {
   log.step('Cleaning dist directory...');
@@ -184,13 +185,57 @@ async function reportBuildInfo() {
     const manifest = JSON.parse(
       await fs.readFile(resolve('dist/manifest.json'), 'utf8')
     );
-    
-    console.log(`
-Build Summary:
-  Version: ${manifest.version}
-  Environment: ${process.env.NODE_ENV || 'development'}
-  Timestamp: ${new Date().toISOString()}
-`);
+    // List output files and sizes
+    const distFiles = await fs.readdir(resolve('dist'));
+    const fileStats = await Promise.all(distFiles.map(async f => {
+      const stat = await fs.stat(resolve('dist', f));
+      return { name: f, size: stat.size };
+    }));
+    // List icons
+    let iconCount = 0;
+    try {
+      iconCount = (await fs.readdir(resolve('dist/icons'))).length;
+    } catch {}
+    // List warnings
+    let warnings = [];
+    try {
+      const icons = await fs.readdir(resolve('src/icons'));
+      if (!icons.some(f => f.endsWith('.png'))) {
+        warnings.push('No icon files found! Please add icon16.png, icon48.png, icon128.png to src/icons/');
+      }
+    } catch {
+      warnings.push('No icon files found! Please add icon16.png, icon48.png, icon128.png to src/icons/');
+    }
+    // Print summary
+    showHeader('VTF Audio Extension Build Report');
+    console.log('Build Summary:');
+    console.log(`  Version: ${manifest.version}`);
+    console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`  Timestamp: ${new Date().toISOString()}`);
+    console.log('\nOutput Files:');
+    for (const f of fileStats) {
+      console.log(`  dist/${f.name}`.padEnd(28) + `${(f.size/1024).toFixed(1)} KB`);
+    }
+    if (iconCount > 0) {
+      console.log(`  dist/icons/`.padEnd(28) + `${iconCount} files`);
+    }
+    if (warnings.length) {
+      console.log('\nWarnings:');
+      for (const w of warnings) {
+        log.warn(w);
+      }
+    }
+    console.log('\nNext Steps:');
+    console.log('  1. Open chrome://extensions/');
+    console.log('  2. Click "Load unpacked" and select the "dist" folder');
+    console.log('  3. Reload the extension if already loaded');
+    if (process.argv.includes('--open')) {
+      // macOS only: open chrome://extensions/
+      try {
+        execSync('open "chrome://extensions/"');
+        log.info('Opened chrome://extensions/ in your default browser.');
+      } catch {}
+    }
   } catch (error) {
     // Ignore errors
   }
