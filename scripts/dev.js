@@ -11,7 +11,7 @@ let buildTimeout = null;
 let isBuilding = false;
 
 function runBuild(trigger) {
-  // Debounce rapid changes
+  
   if (buildTimeout) {
     clearTimeout(buildTimeout);
   }
@@ -28,7 +28,7 @@ function runBuild(trigger) {
       buildProcess.kill();
     }
     
-    console.log(`\n${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
+    
     log.info(`Change detected: ${trigger}`);
     console.time('Build completed in');
     
@@ -43,7 +43,7 @@ function runBuild(trigger) {
       
       if (code === 0) {
         log.success('Ready! Reload extension in Chrome');
-        console.log(`${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
+        
       } else {
         log.error('Build failed! Check errors above');
       }
@@ -51,10 +51,9 @@ function runBuild(trigger) {
   }, 100);
 }
 
-// Set up file watcher
 const watcher = chokidar.watch(resolve('src'), {
   ignored: [
-    /(^|[\/\\])\../,  // Dotfiles
+    /(^|[\/\\])\../,  
     /node_modules/,
     /\.swp$/,
     /~$/
@@ -63,20 +62,17 @@ const watcher = chokidar.watch(resolve('src'), {
   ignoreInitial: true
 });
 
-// Watch events
 watcher
   .on('add', path => runBuild(path.replace(resolve(), '')))
   .on('change', path => runBuild(path.replace(resolve(), '')))
   .on('unlink', path => runBuild(path.replace(resolve(), '')))
   .on('error', error => log.error(`Watcher error: ${error}`));
 
-// Initial build
 log.info('Starting initial build...');
 runBuild('startup');
 
-// Handle shutdown
 process.on('SIGINT', () => {
-  console.log('\n');
+  
   log.info('Shutting down dev mode...');
   
   watcher.close();
@@ -88,7 +84,5 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Keep process alive
 process.stdin.resume();
 
-console.log(`\n${colors.yellow}Watching for changes...${colors.reset}\nPress Ctrl+C to stop\n`);

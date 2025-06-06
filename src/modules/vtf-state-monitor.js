@@ -1,24 +1,16 @@
-/**
- * VTFStateMonitor - Synchronizes with VTF global state
- * 
- * This module monitors VTF's global state for changes including volume,
- * session state, and user counts. It also hooks into VTF functions to
- * detect reconnection events and other state changes.
- * 
- * @module vtf-state-monitor
- */
+
 
 export class VTFStateMonitor {
     constructor(options = {}) {
-      // Configuration
+      
       this.config = {
-        defaultSyncInterval: 1000,  // ms between state checks
-        volumeThreshold: 0.01,      // minimum volume change to trigger event
+        defaultSyncInterval: 1000,  
+        volumeThreshold: 0.01,      
         enableDebugLogs: false,
         ...options
       };
       
-      // Last known state
+      
       this.lastKnownState = {
         volume: 1.0,
         sessionState: 'unknown',
@@ -28,7 +20,7 @@ export class VTFStateMonitor {
         lastSync: null
       };
       
-      // Event callbacks
+      
       this.callbacks = {
         onVolumeChanged: [],
         onSessionStateChanged: [],
@@ -38,23 +30,18 @@ export class VTFStateMonitor {
         onSyncError: []
       };
       
-      // Internal state
+      
       this.syncInterval = null;
-      this.hookedFunctions = new Map(); // functionName -> {original, hooked}
+      this.hookedFunctions = new Map(); 
       this.isDestroyed = false;
       this.syncCount = 0;
       this.errorCount = 0;
       
-      // Track globals finder reference
+      
       this.globalsFinder = null;
     }
     
-    /**
-     * Start synchronizing with VTF state
-     * @param {Object} globalsFinder - VTFGlobalsFinder instance
-     * @param {number} interval - Sync interval in milliseconds
-     * @returns {boolean} - True if sync started successfully
-     */
+    
     startSync(globalsFinder, interval = 1000) {
       if (!globalsFinder || typeof globalsFinder !== 'object') {
         console.error('[State Monitor] Invalid globalsFinder provided');
@@ -62,21 +49,20 @@ export class VTFStateMonitor {
       }
       
       if (this.syncInterval) {
-        console.warn('[State Monitor] Sync already running, stopping previous sync');
+        
         this.stopSync();
       }
       
-      console.log('[State Monitor] Starting synchronization');
       
       this.globalsFinder = globalsFinder;
       
-      // Initial sync
+      
       this.syncState(globalsFinder);
       
-      // Hook VTF functions
+      
       this.hookVTFFunctions(globalsFinder);
       
-      // Start periodic sync
+      
       this.syncInterval = setInterval(() => {
         if (!this.isDestroyed) {
           this.syncState(globalsFinder);
@@ -86,24 +72,19 @@ export class VTFStateMonitor {
       return true;
     }
     
-    /**
-     * Stop synchronization
-     */
+    
     stopSync() {
       if (this.syncInterval) {
         clearInterval(this.syncInterval);
         this.syncInterval = null;
-        console.log('[State Monitor] Synchronization stopped');
+        
       }
       
-      // Unhook functions
+      
       this.unhookVTFFunctions();
     }
     
-    /**
-     * Manually sync state
-     * @param {Object} globalsFinder - VTFGlobalsFinder instance
-     */
+    
     syncState(globalsFinder) {
       if (this.isDestroyed) return;
       
@@ -111,7 +92,7 @@ export class VTFStateMonitor {
         const globals = globalsFinder.globals;
         if (!globals) {
           if (this.config.enableDebugLogs) {
-            console.log('[State Monitor] No globals available for sync');
+            
           }
           return;
         }
@@ -119,50 +100,50 @@ export class VTFStateMonitor {
         this.syncCount++;
         let hasChanges = false;
         
-        // Check volume
+        
         const currentVolume = this.normalizeVolume(globals.audioVolume);
         if (Math.abs(currentVolume - this.lastKnownState.volume) > this.config.volumeThreshold) {
           const oldVolume = this.lastKnownState.volume;
           this.lastKnownState.volume = currentVolume;
-          console.log(`[State Monitor] Volume changed: ${oldVolume.toFixed(2)} → ${currentVolume.toFixed(2)}`);
+          
           this.emit('onVolumeChanged', currentVolume, oldVolume);
           hasChanges = true;
         }
         
-        // Check session state
+        
         const sessionState = globals.sessData?.currentState || 'unknown';
         if (sessionState !== this.lastKnownState.sessionState) {
           const oldState = this.lastKnownState.sessionState;
           this.lastKnownState.sessionState = sessionState;
-          console.log(`[State Monitor] Session state changed: ${oldState} → ${sessionState}`);
+          
           this.emit('onSessionStateChanged', sessionState, oldState);
           hasChanges = true;
         }
         
-        // Check talking users
+        
         const talkingUsers = this.getTalkingUsers(globals, globalsFinder);
         if (this.hasTalkingUsersChanged(talkingUsers)) {
           const oldUsers = new Map(this.lastKnownState.talkingUsers);
           this.lastKnownState.talkingUsers = new Map(talkingUsers);
-          console.log(`[State Monitor] Talking users changed: ${oldUsers.size} → ${talkingUsers.size}`);
+          
           this.emit('onTalkingUsersChanged', talkingUsers, oldUsers);
           hasChanges = true;
         }
         
-        // Check preferences
+        
         if (this.havePreferencesChanged(globals.preferences)) {
           const oldPrefs = { ...this.lastKnownState.preferences };
           this.lastKnownState.preferences = { ...globals.preferences };
-          console.log('[State Monitor] Preferences changed');
+          
           this.emit('onPreferencesChanged', this.lastKnownState.preferences, oldPrefs);
           hasChanges = true;
         }
         
-        // Update last sync time
+        
         this.lastKnownState.lastSync = Date.now();
         
         if (this.config.enableDebugLogs && hasChanges) {
-          console.log('[State Monitor] Sync completed with changes');
+          
         }
         
       } catch (error) {
@@ -172,38 +153,35 @@ export class VTFStateMonitor {
       }
     }
     
-    /**
-     * Hook into VTF functions to detect events
-     * @param {Object} globalsFinder - VTFGlobalsFinder instance
-     */
+    
     hookVTFFunctions(globalsFinder) {
-      // Hook reconnectAudio
+      
       this.hookFunction('reconnectAudio', 
         () => this.findFunction('reconnectAudio', globalsFinder),
         () => {
-          console.log('[State Monitor] reconnectAudio called');
+          
           this.lastKnownState.reconnectCount++;
           this.emit('onReconnect', this.lastKnownState.reconnectCount);
         }
       );
       
-      // Hook adjustVol
+      
       this.hookFunction('adjustVol',
         () => this.findFunction('adjustVol', globalsFinder),
         (event) => {
-          // Volume change will be detected in next sync
+          
           if (this.config.enableDebugLogs) {
-            console.log('[State Monitor] adjustVol called');
+            
           }
         }
       );
       
-      // Hook mute/unmute if available
+      
       this.hookFunction('mute',
         () => this.findFunction('mute', globalsFinder),
         () => {
-          console.log('[State Monitor] mute called');
-          // Force immediate sync to catch mute state
+          
+          
           if (this.globalsFinder) {
             setTimeout(() => this.syncState(this.globalsFinder), 50);
           }
@@ -213,8 +191,8 @@ export class VTFStateMonitor {
       this.hookFunction('unMute',
         () => this.findFunction('unMute', globalsFinder),
         () => {
-          console.log('[State Monitor] unMute called');
-          // Force immediate sync
+          
+          
           if (this.globalsFinder) {
             setTimeout(() => this.syncState(this.globalsFinder), 50);
           }
@@ -222,12 +200,9 @@ export class VTFStateMonitor {
       );
     }
     
-    /**
-     * Find a VTF function in various locations
-     * @private
-     */
+    
     findFunction(funcName, globalsFinder) {
-      // Check room component first (most functions are here)
+      
       if (globalsFinder.roomComponent && 
           typeof globalsFinder.roomComponent[funcName] === 'function') {
         return { 
@@ -236,7 +211,7 @@ export class VTFStateMonitor {
         };
       }
       
-      // Check mediaSoupService
+      
       if (globalsFinder.mediaSoupService && 
           typeof globalsFinder.mediaSoupService[funcName] === 'function') {
         return { 
@@ -245,7 +220,7 @@ export class VTFStateMonitor {
         };
       }
       
-      // Check appService
+      
       if (globalsFinder.appService && 
           typeof globalsFinder.appService[funcName] === 'function') {
         return { 
@@ -254,7 +229,7 @@ export class VTFStateMonitor {
         };
       }
       
-      // Check mediaHandlerService if available
+      
       if (globalsFinder.appService?.mediaHandlerService &&
           typeof globalsFinder.appService.mediaHandlerService[funcName] === 'function') {
         return {
@@ -266,39 +241,36 @@ export class VTFStateMonitor {
       return null;
     }
     
-    /**
-     * Hook a single function
-     * @private
-     */
+    
     hookFunction(funcName, findFunc, beforeHook) {
       try {
         const found = findFunc();
         if (!found) {
           if (this.config.enableDebugLogs) {
-            console.log(`[State Monitor] Function ${funcName} not found for hooking`);
+            
           }
           return;
         }
         
         const { obj, func } = found;
         
-        // Don't hook if already hooked
+        
         if (this.hookedFunctions.has(funcName)) {
           return;
         }
         
-        // Create hooked version
+        
         const hooked = function(...args) {
           try {
             beforeHook(...args);
           } catch (error) {
             console.error(`[State Monitor] Error in ${funcName} hook:`, error);
           }
-          // Call original
+          
           return func.apply(this, args);
         };
         
-        // Store reference
+        
         this.hookedFunctions.set(funcName, {
           obj,
           original: func,
@@ -306,25 +278,21 @@ export class VTFStateMonitor {
           propertyName: funcName
         });
         
-        // Replace function
+        
         obj[funcName] = hooked;
         
-        console.log(`[State Monitor] Hooked ${funcName} function`);
         
       } catch (error) {
         console.error(`[State Monitor] Failed to hook ${funcName}:`, error);
       }
     }
     
-    /**
-     * Unhook all VTF functions
-     * @private
-     */
+    
     unhookVTFFunctions() {
       for (const [funcName, hookInfo] of this.hookedFunctions) {
         try {
           hookInfo.obj[hookInfo.propertyName] = hookInfo.original;
-          console.log(`[State Monitor] Unhooked ${funcName} function`);
+          
         } catch (error) {
           console.error(`[State Monitor] Failed to unhook ${funcName}:`, error);
         }
@@ -332,12 +300,7 @@ export class VTFStateMonitor {
       this.hookedFunctions.clear();
     }
     
-    /**
-     * Add event listener
-     * @param {string} event - Event name
-     * @param {Function} callback - Callback function
-     * @returns {boolean} - True if listener added
-     */
+    
     on(event, callback) {
       if (!this.callbacks[event]) {
         console.error(`[State Monitor] Unknown event: ${event}`);
@@ -353,12 +316,7 @@ export class VTFStateMonitor {
       return true;
     }
     
-    /**
-     * Remove event listener
-     * @param {string} event - Event name
-     * @param {Function} callback - Callback function to remove
-     * @returns {boolean} - True if listener removed
-     */
+    
     off(event, callback) {
       if (!this.callbacks[event]) {
         return false;
@@ -372,17 +330,13 @@ export class VTFStateMonitor {
       return false;
     }
     
-    /**
-     * Emit event to all listeners
-     * @param {string} event - Event name
-     * @param {...any} args - Arguments to pass to callbacks
-     */
+    
     emit(event, ...args) {
       if (!this.callbacks[event]) {
         return;
       }
       
-      // Call each callback, catching errors
+      
       for (const callback of this.callbacks[event]) {
         try {
           callback(...args);
@@ -392,10 +346,7 @@ export class VTFStateMonitor {
       }
     }
     
-    /**
-     * Get current state snapshot
-     * @returns {Object} - Copy of current state
-     */
+    
     getState() {
       return {
         volume: this.lastKnownState.volume,
@@ -408,38 +359,32 @@ export class VTFStateMonitor {
       };
     }
     
-    /**
-     * Get talking users from various sources
-     * @private
-     */
+    
     getTalkingUsers(globals, globalsFinder) {
-      // Try globals first
+      
       if (globals.talkingUsers instanceof Map) {
         return globals.talkingUsers;
       }
       
-      // Try mediaSoupService
+      
       if (globalsFinder.mediaSoupService?.talkingUsers instanceof Map) {
         return globalsFinder.mediaSoupService.talkingUsers;
       }
       
-      // Return empty map as fallback
+      
       return new Map();
     }
     
-    /**
-     * Check if talking users have changed
-     * @private
-     */
+    
     hasTalkingUsersChanged(newUsers) {
       const oldUsers = this.lastKnownState.talkingUsers;
       
-      // Check size first
+      
       if (oldUsers.size !== newUsers.size) {
         return true;
       }
       
-      // Check each user
+      
       for (const [userId, userData] of newUsers) {
         if (!oldUsers.has(userId)) {
           return true;
@@ -449,10 +394,7 @@ export class VTFStateMonitor {
       return false;
     }
     
-    /**
-     * Check if preferences have changed
-     * @private
-     */
+    
     havePreferencesChanged(newPrefs) {
       if (!newPrefs) return false;
       
@@ -460,12 +402,12 @@ export class VTFStateMonitor {
       const oldKeys = Object.keys(oldPrefs);
       const newKeys = Object.keys(newPrefs);
       
-      // Check key count
+      
       if (oldKeys.length !== newKeys.length) {
         return true;
       }
       
-      // Check each value
+      
       for (const key of newKeys) {
         if (oldPrefs[key] !== newPrefs[key]) {
           return true;
@@ -475,10 +417,7 @@ export class VTFStateMonitor {
       return false;
     }
     
-    /**
-     * Normalize volume value
-     * @private
-     */
+    
     normalizeVolume(volume) {
       if (typeof volume !== 'number') {
         return 1.0;
@@ -486,10 +425,7 @@ export class VTFStateMonitor {
       return Math.max(0, Math.min(1, volume));
     }
     
-    /**
-     * Get debug information
-     * @returns {Object} - Debug state
-     */
+    
     debug() {
       return {
         config: { ...this.config },
@@ -508,27 +444,24 @@ export class VTFStateMonitor {
       };
     }
     
-    /**
-     * Clean up and destroy the monitor
-     */
+    
     destroy() {
-      console.log('[State Monitor] Destroying state monitor');
       
       this.isDestroyed = true;
       
-      // Stop sync
+      
       this.stopSync();
       
-      // Clear all listeners
+      
       for (const event in this.callbacks) {
         this.callbacks[event] = [];
       }
       
-      // Clear references
+      
       this.globalsFinder = null;
       this.lastKnownState.talkingUsers.clear();
     }
   }
   
-  // Export as default as well
+  
   export default VTFStateMonitor;

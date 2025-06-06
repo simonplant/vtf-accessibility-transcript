@@ -1,11 +1,4 @@
-/**
- * VTF Audio Extension - Main Content Script
- * 
- * This is the primary orchestrator that integrates all refactored modules
- * and manages the extension lifecycle on VTF pages.
- * 
- * @module content
- */
+
 
 import { VTFGlobalsFinder } from './modules/vtf-globals-finder.js';
 import { VTFStreamMonitor } from './modules/vtf-stream-monitor.js';
@@ -15,35 +8,35 @@ import { AudioDataTransfer } from './modules/audio-data-transfer.js';
 
 class VTFAudioExtension {
   constructor() {
-    // Core components
+    
     this.globalsFinder = new VTFGlobalsFinder();
     this.audioCapture = new VTFAudioCapture();
     this.streamMonitor = new VTFStreamMonitor();
     this.stateMonitor = new VTFStateMonitor();
     
-    // State tracking
-    this.audioElements = new Map();      // userId -> element
-    this.activeCaptures = new Map();     // userId -> capture info
-    this.pendingStreams = new Map();     // userId -> pending stream detection
     
-    // Configuration
+    this.audioElements = new Map();      
+    this.activeCaptures = new Map();     
+    this.pendingStreams = new Map();     
+    
+    
     this.config = {
-      autoStart: true,                   // Auto-start on page load
-      globalsTimeout: 30000,             // Max wait for VTF globals
+      autoStart: true,                   
+      globalsTimeout: 30000,             
       enableDebugLogs: false,
-      retryInterval: 5000,               // Retry interval for failed operations
-      notificationDuration: 5000         // How long notifications show
+      retryInterval: 5000,               
+      notificationDuration: 5000         
     };
     
-    // Status
+    
     this.isInitialized = false;
     this.isCapturing = false;
     this.initializationError = null;
     
-    // DOM observer
+    
     this.domObserver = null;
     
-    // Metrics
+    
     this.metrics = {
       capturesStarted: 0,
       capturesFailed: 0,
@@ -51,7 +44,7 @@ class VTFAudioExtension {
       errors: 0
     };
     
-    // Legacy message type mapping
+    
     this.legacyMessageMap = {
       'audioData': 'audioChunk',
       'start_capture': 'startCapture', 
@@ -60,15 +53,12 @@ class VTFAudioExtension {
     };
   }
   
-  /**
-   * Initialize the extension
-   */
+  
   async init() {
-    console.log('[VTF Extension] Initializing...');
     
     try {
-      // Phase 1: Wait for VTF globals
-      console.log('[VTF Extension] Phase 1: Waiting for VTF globals...');
+      
+      
       const globalsFound = await this.globalsFinder.waitForGlobals(
         Math.floor(this.config.globalsTimeout / 500),
         500
@@ -78,46 +68,44 @@ class VTFAudioExtension {
         throw new Error('VTF globals not found after timeout');
       }
       
-      console.log('[VTF Extension] VTF globals found');
       
-      // Phase 2: Initialize audio subsystem
-      console.log('[VTF Extension] Phase 2: Initializing audio system...');
+      
+      
       await this.audioCapture.initialize();
       
-      // Pass globalsFinder reference to audio capture for volume access
+      
       this.audioCapture.globalsFinder = this.globalsFinder;
       
-      // Phase 3: Set up state monitoring
-      console.log('[VTF Extension] Phase 3: Setting up state monitoring...');
+      
+      
       this.stateMonitor.startSync(this.globalsFinder, 1000);
       
-      // Phase 4: Wire up event handlers
-      console.log('[VTF Extension] Phase 4: Setting up event handlers...');
+      
+      
       this.setupEventHandlers();
       
-      // Phase 5: Set up DOM monitoring
-      console.log('[VTF Extension] Phase 5: Setting up DOM observer...');
+      
+      
       this.setupDOMObserver();
       
-      // Phase 6: Process existing elements
-      console.log('[VTF Extension] Phase 6: Scanning existing elements...');
+      
+      
       this.scanExistingElements();
       
-      // Phase 7: Set up message handlers
-      console.log('[VTF Extension] Phase 7: Setting up message handlers...');
+      
+      
       this.setupMessageHandlers();
       
-      // Phase 8: Load settings and auto-start if enabled
+      
       const settings = await this.loadSettings();
       if (settings.autoStart !== false && this.config.autoStart) {
-        console.log('[VTF Extension] Phase 8: Auto-starting capture...');
+        
         await this.startCapture();
       }
       
       this.isInitialized = true;
-      console.log('[VTF Extension] Initialization complete');
       
-      // Notify popup/background
+      
       this.sendMessage({
         type: 'extensionInitialized',
         status: this.getStatus()
@@ -128,35 +116,30 @@ class VTFAudioExtension {
       this.initializationError = error.message;
       this.notifyUser(`VTF Extension: ${error.message}`);
       
-      // Try to recover
+      
       if (error.message.includes('VTF globals')) {
         setTimeout(() => this.retryInitialization(), this.config.retryInterval);
       }
     }
   }
   
-  /**
-   * Retry initialization after failure
-   */
+  
   async retryInitialization() {
-    console.log('[VTF Extension] Retrying initialization...');
     
-    // Reset state
+    
     this.isInitialized = false;
     this.initializationError = null;
     
-    // Clean up any partial initialization
+    
     this.cleanup();
     
-    // Try again
+    
     await this.init();
   }
   
-  /**
-   * Set up event handlers for module coordination
-   */
+  
   setupEventHandlers() {
-    // Volume changes from VTF
+    
     this.stateMonitor.on('onVolumeChanged', async (newVolume, oldVolume) => {
       try {
         await this.audioCapture.updateVolume(newVolume);
@@ -166,9 +149,8 @@ class VTFAudioExtension {
       }
     });
     
-    // Session state changes
+    
     this.stateMonitor.on('onSessionStateChanged', (newState, oldState) => {
-      console.log(`[VTF Extension] Session state: ${oldState} → ${newState}`);
       
       if (newState === 'closed') {
         this.handleSessionClosed();
@@ -182,18 +164,17 @@ class VTFAudioExtension {
       });
     });
     
-    // Reconnect events
+    
     this.stateMonitor.on('onReconnect', (count) => {
-      console.log(`[VTF Extension] VTF reconnect #${count}`);
+      
       this.metrics.reconnects++;
       this.handleReconnect();
     });
     
-    // Talking users changes
+    
     this.stateMonitor.on('onTalkingUsersChanged', (newUsers, oldUsers) => {
-      console.log(`[VTF Extension] Talking users changed: ${oldUsers.size} → ${newUsers.size}`);
       
-      // Find removed users
+      
       for (const [userId] of oldUsers) {
         if (!newUsers.has(userId)) {
           this.handleUserLeft(userId);
@@ -201,14 +182,14 @@ class VTFAudioExtension {
       }
     });
     
-    // Audio capture events
+    
     this.audioCapture.on('captureStarted', (userId) => {
-      console.log(`[VTF Extension] Audio capture started for ${userId}`);
+      
       this.metrics.capturesStarted++;
     });
     
     this.audioCapture.on('captureStopped', (userId) => {
-      console.log(`[VTF Extension] Audio capture stopped for ${userId}`);
+      
     });
     
     this.audioCapture.on('captureError', (userId, error) => {
@@ -218,9 +199,7 @@ class VTFAudioExtension {
     });
   }
   
-  /**
-   * Set up DOM observer for audio elements
-   */
+  
   setupDOMObserver() {
     this.domObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
@@ -245,12 +224,10 @@ class VTFAudioExtension {
       subtree: true
     });
     
-    console.log(`[VTF Extension] DOM observer started on ${target.id || 'document.body'}`);
+    
   }
   
-  /**
-   * Check if a node is a VTF audio element
-   */
+  
   isVTFAudioElement(node) {
     return node.nodeType === Node.ELEMENT_NODE &&
            node.nodeName === 'AUDIO' && 
@@ -258,29 +235,26 @@ class VTFAudioExtension {
            node.id.startsWith('msRemAudio-');
   }
   
-  /**
-   * Handle new audio element
-   */
+  
   handleNewAudioElement(element) {
     const userId = element.id.replace('msRemAudio-', '');
-    console.log(`[VTF Extension] New audio element detected: ${userId}`);
     
-    // Store element reference
+    
     this.audioElements.set(userId, element);
     
-    // Only process if capturing
+    
     if (!this.isCapturing) {
-      console.log(`[VTF Extension] Not capturing, skipping ${userId}`);
+      
       return;
     }
     
-    // Check if already monitoring
+    
     if (this.pendingStreams.has(userId)) {
-      console.log(`[VTF Extension] Already monitoring ${userId}`);
+      
       return;
     }
     
-    // Start monitoring for stream
+    
     this.pendingStreams.set(userId, true);
     
     this.streamMonitor.startMonitoring(element, userId, async (stream) => {
@@ -289,40 +263,37 @@ class VTFAudioExtension {
     });
   }
   
-  /**
-   * Handle stream assignment
-   */
+  
   async handleStreamAssigned(element, stream, userId) {
-    console.log(`[VTF Extension] Stream ${stream ? 'assigned' : 'timeout'} for ${userId}`);
     
     if (!stream) {
-      console.warn(`[VTF Extension] No stream detected for ${userId}`);
+      
       return;
     }
     
     if (!this.isCapturing) {
-      console.log(`[VTF Extension] Capture stopped, not processing ${userId}`);
+      
       return;
     }
     
     try {
-      // Wait for stream to be ready
+      
       await this.streamMonitor.waitForStreamReady(stream);
       
-      // Start audio capture
+      
       await this.audioCapture.captureElement(element, stream, userId);
       
-      // Track active capture
+      
       this.activeCaptures.set(userId, {
         element,
         stream,
         startTime: Date.now()
       });
       
-      // Get speaker name
+      
       const speakerName = this.getSpeakerName(userId);
       
-      // Notify background
+      
       this.sendMessage({
         type: 'userJoined',
         userId,
@@ -330,7 +301,6 @@ class VTFAudioExtension {
         timestamp: Date.now()
       });
       
-      console.log(`[VTF Extension] Audio capture active for ${speakerName} (${userId})`);
       
     } catch (error) {
       console.error(`[VTF Extension] Failed to capture ${userId}:`, error);
@@ -338,34 +308,29 @@ class VTFAudioExtension {
     }
   }
   
-  /**
-   * Handle removed audio element
-   */
+  
   handleRemovedAudioElement(element) {
     const userId = element.id.replace('msRemAudio-', '');
-    console.log(`[VTF Extension] Audio element removed: ${userId}`);
     
     this.handleUserLeft(userId);
   }
   
-  /**
-   * Handle user leaving
-   */
+  
   handleUserLeft(userId) {
-    // Stop monitoring if pending
+    
     if (this.pendingStreams.has(userId)) {
       this.streamMonitor.stopMonitoring(userId);
       this.pendingStreams.delete(userId);
     }
     
-    // Stop capture if active
+    
     if (this.activeCaptures.has(userId)) {
       this.audioCapture.stopCapture(userId);
       this.activeCaptures.delete(userId);
       
       const speakerName = this.getSpeakerName(userId);
       
-      // Notify background
+      
       this.sendMessage({
         type: 'userLeft',
         userId,
@@ -374,7 +339,7 @@ class VTFAudioExtension {
       });
     }
     
-    // Remove element reference
+    
     this.audioElements.delete(userId);
     
     if (element.srcObject && typeof element.srcObject.getTracks === 'function') {
@@ -384,67 +349,57 @@ class VTFAudioExtension {
     }
   }
   
-  /**
-   * Handle VTF reconnect
-   */
+  
   handleReconnect() {
-    console.log('[VTF Extension] Handling VTF reconnect - clearing all state');
     
-    // Stop all captures
+    
     this.audioCapture.stopAll();
     
-    // Clear all state
+    
     this.activeCaptures.clear();
     this.audioElements.clear();
     this.pendingStreams.clear();
     this.streamMonitor.stopAll();
     
-    // Notify background
+    
     this.sendMessage({
       type: 'reconnectAudio',
       timestamp: Date.now()
     });
     
-    // Re-scan after delay (VTF needs time to recreate elements)
+    
     setTimeout(() => {
       if (this.isCapturing) {
-        console.log('[VTF Extension] Re-scanning after reconnect');
+        
         this.scanExistingElements();
       }
     }, 1000);
   }
   
-  /**
-   * Handle session closed
-   */
+  
   handleSessionClosed() {
-    console.log('[VTF Extension] Session closed - stopping capture');
+    
     this.stopCapture();
   }
   
-  /**
-   * Handle session opened
-   */
+  
   handleSessionOpened() {
-    console.log('[VTF Extension] Session opened');
     
-    // Auto-restart if configured
+    
     if (this.config.autoStart && !this.isCapturing) {
-      console.log('[VTF Extension] Auto-restarting capture');
+      
       this.startCapture();
     }
   }
   
-  /**
-   * Handle capture error
-   */
+  
   handleCaptureError(userId, error) {
     this.metrics.errors++;
     
-    // Remove from active captures
+    
     this.activeCaptures.delete(userId);
     
-    // Log error
+    
     this.sendMessage({
       type: 'error',
       context: 'audioCapture',
@@ -453,9 +408,9 @@ class VTFAudioExtension {
       timestamp: Date.now()
     });
     
-    // Retry if appropriate
+    
     if (error.message.includes('suspended') && this.audioElements.has(userId)) {
-      console.log(`[VTF Extension] Retrying capture for ${userId} in 2s`);
+      
       setTimeout(() => {
         const element = this.audioElements.get(userId);
         if (element) {
@@ -465,27 +420,21 @@ class VTFAudioExtension {
     }
   }
   
-  /**
-   * Scan for existing audio elements
-   */
+  
   scanExistingElements() {
     const elements = document.querySelectorAll('audio[id^="msRemAudio-"]');
-    console.log(`[VTF Extension] Found ${elements.length} existing audio elements`);
     
     elements.forEach(element => {
       this.handleNewAudioElement(element);
     });
   }
   
-  /**
-   * Set up Chrome extension message handlers
-   */
+  
   setupMessageHandlers() {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      // Map legacy message types
+      
       const messageType = this.legacyMessageMap[request.type] || request.type;
       
-      console.log(`[VTF Extension] Received message: ${messageType}`);
       
       switch (messageType) {
         case 'startCapture':
@@ -515,75 +464,69 @@ class VTFAudioExtension {
           return false;
           
         default:
-          console.warn(`[VTF Extension] Unknown message type: ${request.type}`);
+          
           sendResponse({ error: 'Unknown command' });
           return false;
       }
     });
   }
   
-  /**
-   * Start audio capture
-   */
+  
   async startCapture() {
     if (!this.isInitialized) {
       throw new Error('Extension not initialized');
     }
     
     if (this.isCapturing) {
-      console.log('[VTF Extension] Already capturing');
+      
       return;
     }
     
-    console.log('[VTF Extension] Starting capture');
+    
     this.isCapturing = true;
     
-    // Scan for existing elements
+    
     this.scanExistingElements();
     
-    // Notify service worker
+    
     this.sendMessage({
       type: 'captureStarted',
       timestamp: Date.now()
     });
     
-    // Show notification
+    
     this.notifyUser('VTF Audio Transcription Started', 'success');
   }
   
-  /**
-   * Stop audio capture
-   */
+  
   async stopCapture() {
     if (!this.isCapturing) {
-      console.log('[VTF Extension] Not capturing');
+      
       return;
     }
     
-    console.log('[VTF Extension] Stopping capture');
+    
     this.isCapturing = false;
     
-    // Stop all monitoring
+    
     this.streamMonitor.stopAll();
     this.pendingStreams.clear();
     
-    // Stop all audio captures
+    
     this.audioCapture.stopAll();
     this.activeCaptures.clear();
     
-    // Notify service worker
+    
     this.sendMessage({
       type: 'captureStopped',
       timestamp: Date.now()
     });
     
-    // Show notification
+    
     this.notifyUser('VTF Audio Transcription Stopped', 'info');
   }
   
-  /**
-   * Get current status
-   */
+  
   getStatus() {
     return {
       initialized: this.isInitialized,
@@ -591,43 +534,40 @@ class VTFAudioExtension {
       capturing: this.isCapturing,
       timestamp: Date.now(),
       
-      // Module states
+      
       globals: this.globalsFinder.debug(),
       streamMonitor: this.streamMonitor.debug(),
       stateMonitor: this.stateMonitor.debug(),
       audioCapture: this.audioCapture.debug(),
       
-      // Active captures
+      
       activeUsers: Array.from(this.activeCaptures.entries()).map(([userId, info]) => ({
         userId,
         speaker: this.getSpeakerName(userId),
         duration: Date.now() - info.startTime
       })),
       
-      // Pending streams
+      
       pendingUsers: Array.from(this.pendingStreams.keys()),
       
-      // Transfer stats
+      
       transferStats: this.audioCapture.dataTransfer?.getStats() || {},
       
-      // Metrics
+      
       metrics: this.metrics
     };
   }
   
-  /**
-   * Display transcription in UI
-   */
+  
   displayTranscription(transcription) {
-    console.log(`[VTF Extension] Displaying transcription from ${transcription.speaker}`);
     
-    // Create or update transcription display
+    
     this.ensureTranscriptionDisplay();
     
     const display = document.getElementById('vtf-transcription-display');
     if (!display) return;
     
-    // Add transcription entry
+    
     const entry = document.createElement('div');
     entry.className = 'vtf-transcript-entry';
     entry.innerHTML = `
@@ -641,15 +581,13 @@ class VTFAudioExtension {
     const content = display.querySelector('.vtf-transcript-content');
     content.insertBefore(entry, content.firstChild);
     
-    // Keep only last 50 entries
+    
     while (content.children.length > 50) {
       content.removeChild(content.lastChild);
     }
   }
   
-  /**
-   * Ensure transcription display exists
-   */
+  
   ensureTranscriptionDisplay() {
     if (document.getElementById('vtf-transcription-display')) return;
     
@@ -665,7 +603,7 @@ class VTFAudioExtension {
     
     document.body.appendChild(display);
     
-    // Close button handler
+    
     const closeHandler = () => { display.remove(); };
     display.querySelector('.vtf-transcript-close').addEventListener('click', closeHandler);
     
@@ -675,9 +613,7 @@ class VTFAudioExtension {
     this._notificationHandlers.push({el: display.querySelector('.vtf-transcript-close'), handler: closeHandler});
   }
   
-  /**
-   * Show user notification
-   */
+  
   notifyUser(message, type = 'info') {
     const notification = document.createElement('div');
     notification.className = `vtf-extension-notification ${type}`;
@@ -694,24 +630,20 @@ class VTFAudioExtension {
     }, this.config.notificationDuration);
   }
   
-  /**
-   * Get speaker name for userId
-   */
+  
   getSpeakerName(userId) {
-    // Check if we have a mapping from state monitor
+    
     const talkingUsers = this.stateMonitor.getState().talkingUsers;
     if (talkingUsers && talkingUsers.has) {
       const userData = talkingUsers.get(userId);
       if (userData?.name) return userData.name;
     }
     
-    // Use shortened ID as fallback
+    
     return `User-${userId.substring(0, 6).toUpperCase()}`;
   }
   
-  /**
-   * Send message to service worker
-   */
+  
   sendMessage(message) {
     try {
       chrome.runtime.sendMessage(message, response => {
@@ -726,25 +658,20 @@ class VTFAudioExtension {
     }
   }
   
-  /**
-   * Handle extension errors
-   */
+  
   handleExtensionError(error) {
     if (error.message?.includes('Extension context invalidated')) {
       this.handleExtensionReload();
     }
   }
   
-  /**
-   * Handle extension reload
-   */
+  
   handleExtensionReload() {
-    console.log('[VTF Extension] Extension reloaded, showing notification');
     
-    // Stop everything
+    
     this.stopCapture();
     
-    // Show reload notification
+    
     const notification = document.createElement('div');
     notification.innerHTML = `
       <div style="
@@ -779,9 +706,7 @@ class VTFAudioExtension {
     document.body.appendChild(notification);
   }
   
-  /**
-   * Load settings from storage
-   */
+  
   async loadSettings() {
     try {
       const result = await chrome.storage.local.get(['settings']);
@@ -792,47 +717,42 @@ class VTFAudioExtension {
     }
   }
   
-  /**
-   * Clean up partial initialization
-   */
+  
   cleanup() {
-    // Stop any active operations
+    
     if (this.isCapturing) {
       this.stopCapture();
     }
     
-    // Disconnect observer
+    
     if (this.domObserver) {
       this.domObserver.disconnect();
       this.domObserver = null;
     }
     
-    // Stop monitoring
+    
     this.streamMonitor.stopAll();
     this.stateMonitor.stopSync();
     
-    // Clear maps
+    
     this.audioElements.clear();
     this.activeCaptures.clear();
     this.pendingStreams.clear();
   }
   
-  /**
-   * Destroy the extension
-   */
+  
   destroy() {
-    console.log('[VTF Extension] Destroying extension instance');
     
-    // Stop everything
+    
     this.cleanup();
     
-    // Destroy all modules
+    
     this.audioCapture.destroy();
     this.streamMonitor.destroy();
     this.stateMonitor.destroy();
     this.globalsFinder.destroy();
     
-    // Clear references
+    
     this.isInitialized = false;
     
     if (this._notificationElements) {
@@ -850,9 +770,7 @@ class VTFAudioExtension {
     }
   }
   
-  /**
-   * Get debug information
-   */
+  
   debug() {
     return {
       initialized: this.isInitialized,
@@ -872,7 +790,6 @@ class VTFAudioExtension {
   }
 }
 
-// Auto-initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initializeExtension);
 } else {
@@ -880,9 +797,8 @@ if (document.readyState === 'loading') {
 }
 
 async function initializeExtension() {
-  console.log('[VTF Extension] DOM ready, starting initialization');
   
-  // Create global instance for debugging
+  
   window.vtfExtension = new VTFAudioExtension();
   
   try {
@@ -892,12 +808,10 @@ async function initializeExtension() {
   }
 }
 
-// Handle page unload
 window.addEventListener('beforeunload', () => {
   if (window.vtfExtension) {
     window.vtfExtension.destroy();
   }
 });
 
-// Export for testing
 export { VTFAudioExtension };

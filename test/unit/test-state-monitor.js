@@ -1,13 +1,9 @@
-/**
- * Test suite for VTFStateMonitor
- * Run these tests in the browser console
- */
+
 
 import { VTFStateMonitor } from './vtf-state-monitor.js';
 
-// Test utilities
 const TestUtils = {
-  // Create mock globals finder
+  
   createMockGlobalsFinder() {
     return {
       globals: {
@@ -31,17 +27,17 @@ const TestUtils = {
     };
   },
   
-  // Wait helper
+  
   wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
   
-  // Async test runner
+  
   async runTest(name, testFn) {
     console.group(`🧪 Test: ${name}`);
     try {
       await testFn();
-      console.log('✅ PASSED');
+      
     } catch (error) {
       console.error('❌ FAILED:', error);
     }
@@ -49,9 +45,8 @@ const TestUtils = {
   }
 };
 
-// Test Suite
 const VTFStateMonitorTests = {
-  // Test 1: Basic instantiation
+  
   async testInstantiation() {
     const monitor = new VTFStateMonitor();
     console.assert(monitor instanceof VTFStateMonitor, 'Should create instance');
@@ -60,12 +55,12 @@ const VTFStateMonitorTests = {
     monitor.destroy();
   },
   
-  // Test 2: Start/stop sync
+  
   async testStartStopSync() {
     const monitor = new VTFStateMonitor();
     const mockFinder = TestUtils.createMockGlobalsFinder();
     
-    // Start sync
+    
     const started = monitor.startSync(mockFinder, 100);
     console.assert(started === true, 'Should start sync');
     console.assert(monitor.syncInterval !== null, 'Should have sync interval');
@@ -73,14 +68,14 @@ const VTFStateMonitorTests = {
     await TestUtils.wait(250);
     console.assert(monitor.syncCount > 0, 'Should have synced');
     
-    // Stop sync
+    
     monitor.stopSync();
     console.assert(monitor.syncInterval === null, 'Should clear interval');
     
     monitor.destroy();
   },
   
-  // Test 3: Volume change detection
+  
   async testVolumeChange() {
     const monitor = new VTFStateMonitor({ volumeThreshold: 0.01 });
     const mockFinder = TestUtils.createMockGlobalsFinder();
@@ -94,7 +89,7 @@ const VTFStateMonitorTests = {
     
     await TestUtils.wait(100);
     
-    // Change volume
+    
     mockFinder.globals.audioVolume = 0.5;
     await TestUtils.wait(100);
     
@@ -105,7 +100,7 @@ const VTFStateMonitorTests = {
     monitor.destroy();
   },
   
-  // Test 4: Session state change
+  
   async testSessionStateChange() {
     const monitor = new VTFStateMonitor();
     const mockFinder = TestUtils.createMockGlobalsFinder();
@@ -118,7 +113,7 @@ const VTFStateMonitorTests = {
     monitor.startSync(mockFinder, 50);
     await TestUtils.wait(100);
     
-    // Change state
+    
     mockFinder.globals.sessData.currentState = 'closed';
     await TestUtils.wait(100);
     
@@ -129,7 +124,7 @@ const VTFStateMonitorTests = {
     monitor.destroy();
   },
   
-  // Test 5: Talking users change
+  
   async testTalkingUsersChange() {
     const monitor = new VTFStateMonitor();
     const mockFinder = TestUtils.createMockGlobalsFinder();
@@ -142,7 +137,7 @@ const VTFStateMonitorTests = {
     monitor.startSync(mockFinder, 50);
     await TestUtils.wait(100);
     
-    // Add user
+    
     mockFinder.globals.talkingUsers.set('user3', { name: 'Charlie' });
     await TestUtils.wait(100);
     
@@ -153,7 +148,7 @@ const VTFStateMonitorTests = {
     monitor.destroy();
   },
   
-  // Test 6: Function hooking
+  
   async testFunctionHooking() {
     const monitor = new VTFStateMonitor();
     const mockFinder = TestUtils.createMockGlobalsFinder();
@@ -163,25 +158,25 @@ const VTFStateMonitorTests = {
       reconnectCalled = true;
     });
     
-    // Add function to window for testing
+    
     window.testReconnectAudio = function() { return 'original'; };
     mockFinder.mediaSoupService.reconnectAudio = window.testReconnectAudio;
     
     monitor.startSync(mockFinder, 1000);
     
-    // Call hooked function
+    
     const result = mockFinder.mediaSoupService.reconnectAudio();
     
     console.assert(reconnectCalled === true, 'Should trigger reconnect event');
     console.assert(result === 'original', 'Should preserve original behavior');
     console.assert(monitor.lastKnownState.reconnectCount === 1, 'Should increment count');
     
-    // Clean up
+    
     delete window.testReconnectAudio;
     monitor.destroy();
   },
   
-  // Test 7: Event listeners
+  
   async testEventListeners() {
     const monitor = new VTFStateMonitor();
     
@@ -189,19 +184,19 @@ const VTFStateMonitorTests = {
     const listener1 = () => callCount++;
     const listener2 = () => callCount++;
     
-    // Add listeners
+    
     console.assert(monitor.on('onVolumeChanged', listener1) === true, 'Should add listener');
     console.assert(monitor.on('onVolumeChanged', listener2) === true, 'Should add second listener');
     console.assert(monitor.on('invalidEvent', listener1) === false, 'Should reject invalid event');
     
-    // Emit event
+    
     monitor.emit('onVolumeChanged', 1.0, 0.5);
     console.assert(callCount === 2, 'Should call both listeners');
     
-    // Remove listener
+    
     console.assert(monitor.off('onVolumeChanged', listener1) === true, 'Should remove listener');
     
-    // Emit again
+    
     callCount = 0;
     monitor.emit('onVolumeChanged', 0.8, 1.0);
     console.assert(callCount === 1, 'Should call remaining listener');
@@ -209,7 +204,7 @@ const VTFStateMonitorTests = {
     monitor.destroy();
   },
   
-  // Test 8: Preferences change
+  
   async testPreferencesChange() {
     const monitor = new VTFStateMonitor();
     const mockFinder = TestUtils.createMockGlobalsFinder();
@@ -222,7 +217,7 @@ const VTFStateMonitorTests = {
     monitor.startSync(mockFinder, 50);
     await TestUtils.wait(100);
     
-    // Change preferences
+    
     mockFinder.globals.preferences.theme = 'light';
     mockFinder.globals.preferences.newPref = true;
     await TestUtils.wait(100);
@@ -234,10 +229,10 @@ const VTFStateMonitorTests = {
     monitor.destroy();
   },
   
-  // Test 9: Error handling
+  
   async testErrorHandling() {
     const monitor = new VTFStateMonitor();
-    const mockFinder = { globals: null }; // Invalid globals
+    const mockFinder = { globals: null }; 
     
     let errors = [];
     monitor.on('onSyncError', (error) => {
@@ -247,10 +242,10 @@ const VTFStateMonitorTests = {
     monitor.startSync(mockFinder, 50);
     await TestUtils.wait(100);
     
-    // Should handle missing globals gracefully
+    
     console.assert(monitor.errorCount === 0, 'Should not count as error');
     
-    // Cause an error by breaking globals
+    
     mockFinder.globals = { get audioVolume() { throw new Error('Test error'); } };
     await TestUtils.wait(100);
     
@@ -260,7 +255,7 @@ const VTFStateMonitorTests = {
     monitor.destroy();
   },
   
-  // Test 10: State snapshot
+  
   async testStateSnapshot() {
     const monitor = new VTFStateMonitor();
     const mockFinder = TestUtils.createMockGlobalsFinder();
@@ -276,7 +271,7 @@ const VTFStateMonitorTests = {
     console.assert(state.isActive === true, 'Should show active');
     console.assert(typeof state.lastSync === 'number', 'Should have sync time');
     
-    // Test debug output
+    
     const debug = monitor.debug();
     console.assert(debug.syncCount > 0, 'Should have sync count');
     console.assert(debug.hookedFunctions.length > 0, 'Should have hooked functions');
@@ -285,9 +280,7 @@ const VTFStateMonitorTests = {
   }
 };
 
-// Run all tests
 async function runAllTests() {
-  console.log('🚀 Starting VTFStateMonitor tests...\n');
   
   const tests = [
     ['Instantiation', VTFStateMonitorTests.testInstantiation],
@@ -306,13 +299,11 @@ async function runAllTests() {
     await TestUtils.runTest(name, testFn);
   }
   
-  console.log('\n✨ All tests completed!');
+  
 }
 
-// Export test functions
 export { runAllTests, VTFStateMonitorTests, TestUtils };
 
-// Auto-run tests if this file is executed directly
 if (typeof window !== 'undefined' && window.location.href.includes('test')) {
   runAllTests();
 }

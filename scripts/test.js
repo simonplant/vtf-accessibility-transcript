@@ -14,7 +14,7 @@ async function findTestFiles() {
       const tests = files.filter(f => f.startsWith('test-') && f.endsWith('.js'));
       testFiles.push(...tests.map(f => path.join(dir, f)));
     } catch (error) {
-      // Directory doesn't exist
+      
     }
   }
   
@@ -33,22 +33,20 @@ async function runTests() {
   }
   
   log.info(`Found ${testFiles.length} test files`);
-  console.log('');
   
-  // Since tests are browser-based, provide instructions
-  console.log('To run tests:');
-  console.log('1. Build the extension: npm run build');
-  console.log('2. Load in Chrome: chrome://extensions/');
-  console.log('3. Navigate to: https://vtf.t3live.com/');
-  console.log('4. Open Chrome DevTools (F12)');
-  console.log('5. In Console, copy and paste test files:\n');
+  
+  
+  
+  
+  
+  
   
   for (const file of testFiles) {
-    console.log(`   • ${file}`);
+    
   }
   
-  console.log('\nTest files are designed to run in the browser console.');
-  console.log('They test the actual extension modules in their runtime environment.');
+  
+  
 }
 
 runTests().catch(error => {

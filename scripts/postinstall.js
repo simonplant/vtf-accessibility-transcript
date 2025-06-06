@@ -8,7 +8,7 @@ async function postinstall() {
   showHeader('Post-Install Setup');
   
   try {
-    // Create required directories
+    
     const dirs = ['dist', 'src/icons'];
     
     for (const dir of dirs) {
@@ -19,7 +19,7 @@ async function postinstall() {
       }
     }
     
-    // Check for icon files
+    
     const iconPath = resolve('src/icons');
     const icons = fs.readdirSync(iconPath).filter(f => f.endsWith('.png'));
     

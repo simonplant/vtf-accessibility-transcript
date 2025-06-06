@@ -50,7 +50,7 @@ async function copyStaticFiles() {
 async function copyAssets() {
   log.step('Copying assets...');
   
-  // Copy icons
+  
   try {
     await fs.mkdir(resolve('dist/icons'), { recursive: true });
     const iconFiles = await fs.readdir(resolve('src/icons'));
@@ -72,7 +72,7 @@ async function copyAssets() {
     log.warn('Icons directory not found');
   }
   
-  // Copy workers
+  
   try {
     await fs.mkdir(resolve('dist/workers'), { recursive: true });
     await fs.copyFile(
@@ -107,12 +107,12 @@ async function bundleContentScript() {
       }
     });
     
-    // Report bundle size
+    
     const stats = await fs.stat(resolve('dist/content.js'));
     const sizeKB = (stats.size / 1024).toFixed(2);
     log.success(`Bundled content script (${sizeKB} KB)`);
     
-    // Save metafile for analysis
+    
     if (result.metafile) {
       await fs.writeFile(
         resolve('dist/meta.json'), 
@@ -161,7 +161,7 @@ async function createPackage() {
   log.step('Creating extension package...');
   
   try {
-    // Get version from manifest
+    
     const manifest = JSON.parse(
       await fs.readFile(resolve('dist/manifest.json'), 'utf8')
     );
@@ -185,18 +185,18 @@ async function reportBuildInfo() {
     const manifest = JSON.parse(
       await fs.readFile(resolve('dist/manifest.json'), 'utf8')
     );
-    // List output files and sizes
+    
     const distFiles = await fs.readdir(resolve('dist'));
     const fileStats = await Promise.all(distFiles.map(async f => {
       const stat = await fs.stat(resolve('dist', f));
       return { name: f, size: stat.size };
     }));
-    // List icons
+    
     let iconCount = 0;
     try {
       iconCount = (await fs.readdir(resolve('dist/icons'))).length;
     } catch {}
-    // List warnings
+    
     let warnings = [];
     try {
       const icons = await fs.readdir(resolve('src/icons'));
@@ -206,38 +206,34 @@ async function reportBuildInfo() {
     } catch {
       warnings.push('No icon files found! Please add icon16.png, icon48.png, icon128.png to src/icons/');
     }
-    // Print summary
+    
     showHeader('VTF Audio Extension Build Report');
-    console.log('Build Summary:');
-    console.log(`  Version: ${manifest.version}`);
-    console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`  Timestamp: ${new Date().toISOString()}`);
-    console.log('\nOutput Files:');
+    
+    
+    
+    
+    
     for (const f of fileStats) {
-      console.log(`  dist/${f.name}`.padEnd(28) + `${(f.size/1024).toFixed(1)} KB`);
+      
     }
     if (iconCount > 0) {
-      console.log(`  dist/icons/`.padEnd(28) + `${iconCount} files`);
+      
     }
     if (warnings.length) {
-      console.log('\nWarnings:');
+      
       for (const w of warnings) {
         log.warn(w);
       }
     }
-    console.log('\nNext Steps:');
-    console.log('  1. Open chrome://extensions/');
-    console.log('  2. Click "Load unpacked" and select the "dist" folder');
-    console.log('  3. Reload the extension if already loaded');
+    
+    
+    
+    
     if (process.argv.includes('--open')) {
-      // macOS only: open chrome://extensions/
-      try {
-        execSync('open "chrome://extensions/"');
-        log.info('Opened chrome://extensions/ in your default browser.');
-      } catch {}
+      
     }
   } catch (error) {
-    // Ignore errors
+    
   }
 }
 
@@ -265,7 +261,7 @@ async function main() {
     if (!process.argv.includes('--package')) {
       console.log(`
 Next steps:
-  1. Open chrome://extensions/
+  1. Open chrome:
   2. Enable "Developer mode"
   3. Click "Load unpacked" → select the "dist" folder
   4. Or reload the extension if already loaded
@@ -279,5 +275,4 @@ Next steps:
   }
 }
 
-// Run build
 main().catch(console.error);

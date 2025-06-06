@@ -1,10 +1,5 @@
-/**
- * VTF Audio Extension - Test Helpers
- * 
- * Shared utilities for testing VTF modules
- */
 
-// Simple assertion helpers (no external dependencies)
+
 const assert = {
   equal(actual, expected, message) {
     if (actual !== expected) {
@@ -55,9 +50,8 @@ const assert = {
   }
 };
 
-// Test runner helpers
 function describe(name, fn) {
-  console.log(`\n📦 ${name}`);
+  
   fn();
 }
 
@@ -65,16 +59,16 @@ function it(description, fn) {
   try {
     const result = fn();
     if (result && typeof result.then === 'function') {
-      // Handle async tests
+      
       return result
-        .then(() => console.log(`  ✅ ${description}`))
+        .then(() => 
         .catch(error => {
           console.error(`  ❌ ${description}`);
           console.error(`     ${error.message}`);
           throw error;
         });
     } else {
-      console.log(`  ✅ ${description}`);
+      
     }
   } catch (error) {
     console.error(`  ❌ ${description}`);
@@ -83,12 +77,11 @@ function it(description, fn) {
   }
 }
 
-// Mock Chrome APIs
 function createMockChromeAPI() {
   return {
     runtime: {
       id: 'test-extension-id',
-      getURL: (path) => `chrome-extension://test-extension-id/${path}`,
+      getURL: (path) => `chrome-extension:
       sendMessage: (message, callback) => {
         if (callback) callback({ mocked: true });
         return Promise.resolve({ mocked: true });
@@ -137,7 +130,7 @@ function createMockChromeAPI() {
     
     tabs: {
       query: (options, callback) => {
-        const tabs = [{ id: 1, url: 'https://vtf.t3live.com/' }];
+        const tabs = [{ id: 1, url: 'https:
         if (callback) callback(tabs);
         return Promise.resolve(tabs);
       },
@@ -149,9 +142,8 @@ function createMockChromeAPI() {
   };
 }
 
-// Mock VTF DOM environment
 function createMockVTFEnvironment() {
-  // Mock audio element
+  
   class MockAudioElement {
     constructor() {
       this.id = '';
@@ -176,7 +168,7 @@ function createMockVTFEnvironment() {
     removeEventListener() {}
   }
   
-  // Mock MediaStream
+  
   class MockMediaStream {
     constructor() {
       this.id = 'mock-stream-' + Math.random();
@@ -193,7 +185,7 @@ function createMockVTFEnvironment() {
     }
   }
   
-  // Mock MediaStreamTrack
+  
   class MockMediaStreamTrack {
     constructor() {
       this.id = 'mock-track-' + Math.random();
@@ -208,7 +200,7 @@ function createMockVTFEnvironment() {
     }
   }
   
-  // Mock DOM
+  
   const mockDOM = {
     elements: new Map(),
     
@@ -242,7 +234,7 @@ function createMockVTFEnvironment() {
     }
   };
   
-  // Mock VTF globals
+  
   const mockGlobals = {
     audioVolume: 0.75,
     sessData: {
@@ -258,7 +250,7 @@ function createMockVTFEnvironment() {
     talkingUsers: new Map()
   };
   
-  // Mock jQuery
+  
   const $ = (selector) => {
     if (selector.startsWith('#')) {
       const el = mockDOM.getElementById(selector.slice(1));
@@ -319,7 +311,6 @@ function createMockVTFEnvironment() {
   };
 }
 
-// Async test utilities
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -342,7 +333,6 @@ function waitFor(condition, timeout = 5000) {
   });
 }
 
-// Export everything
 module.exports = {
   assert,
   describe,

@@ -1,15 +1,8 @@
-/**
- * VTF Extension Popup - Fully integrated with refactored architecture
- * 
- * Works with the new modular system:
- * - content.js (VTFAudioExtension)
- * - background.js (VTFTranscriptionService)
- * - All the new modules (VTFGlobalsFinder, VTFAudioCapture, etc.)
- */
+
 
 class VTFPopup {
   constructor() {
-    // State
+    
     this.extensionStatus = {
       initialized: false,
       capturing: false,
@@ -19,82 +12,81 @@ class VTFPopup {
       stats: {}
     };
     
-    // UI elements
+    
     this.elements = {};
     
-    // Update intervals
+    
     this.statusInterval = null;
     this.transcriptionInterval = null;
     
-    // Message queue for resilience
+    
     this.pendingMessages = [];
     
-    // Initialize
+    
     this.init();
   }
   
   async init() {
-    console.log('[VTF Popup] Initializing...');
     
-    // Cache DOM elements
+    
     this.cacheElements();
     
-    // Set up event listeners
+    
     this.setupEventListeners();
     
-    // Check initial state
+    
     await this.checkExtensionState();
     
-    // Start monitoring
+    
     this.startMonitoring();
     
-    console.log('[VTF Popup] Initialization complete');
+    
   }
   
   cacheElements() {
     this.elements = {
-      // Status indicator
+      
       statusIndicator: document.getElementById('statusIndicator'),
       
-      // Controls
+      
       startBtn: document.getElementById('startBtn'),
       btnText: document.getElementById('btnText'),
       recordingDot: document.getElementById('recordingDot'),
       refreshBtn: document.getElementById('refreshBtn'),
       optionsBtn: document.getElementById('optionsBtn'),
       
-      // Extension state
+      
       extensionState: document.getElementById('extensionState'),
       stateMessage: document.getElementById('stateMessage'),
       
-      // Status grid
+      
       extensionStatus: document.getElementById('extensionStatus'),
       apiKeyStatus: document.getElementById('apiKeyStatus'),
       activeUsers: document.getElementById('activeUsers'),
       transcriptionCount: document.getElementById('transcriptionCount'),
       
-      // Speakers section
+      
       activeSpeakers: document.getElementById('activeSpeakers'),
       speakersGrid: document.getElementById('speakersGrid'),
       
-      // Transcriptions
+      
       transcriptList: document.getElementById('transcriptList')
     };
   }
   
   setupEventListeners() {
-    // Start/Stop button
+    
     this.elements.startBtn.addEventListener('click', () => this.toggleCapture());
     
-    // Refresh button
+    
     this.elements.refreshBtn.addEventListener('click', () => this.refresh());
     
-    // Options button
+    
     this.elements.optionsBtn.addEventListener('click', () => {
       chrome.runtime.openOptionsPage();
     });
     
-    // Listen for real-time updates from content/background
+    
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       this.handleRealtimeUpdate(message);
     });
@@ -102,7 +94,7 @@ class VTFPopup {
   
   async checkExtensionState() {
     try {
-      // Check if we're on VTF
+      
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       this.extensionStatus.onVTFPage = tab?.url?.includes('vtf.t3live.com') || false;
       
@@ -112,13 +104,12 @@ class VTFPopup {
         return;
       }
       
-      // Check API key
+      
       const storage = await chrome.storage.local.get(['openaiApiKey']);
       this.extensionStatus.hasApiKey = !!storage.openaiApiKey;
       
-      // Get extension status from content script
+      
       const contentStatus = await this.sendToContent({ type: 'getStatus' });
-      console.log('[VTF Popup] Content script status:', contentStatus);
       
       if (contentStatus && contentStatus.initialized) {
         this.extensionStatus.initialized = true;
@@ -128,9 +119,8 @@ class VTFPopup {
         this.showExtensionState('Extension is initializing on VTF page...', 'info');
       }
       
-      // Get service worker status
+      
       const serviceStatus = await this.sendToBackground({ type: 'getStatus' });
-      console.log('[VTF Popup] Service worker status:', serviceStatus);
       
       if (serviceStatus) {
         this.updateUIFromServiceStatus(serviceStatus);
@@ -143,7 +133,7 @@ class VTFPopup {
   }
   
   updateUIFromContentStatus(status) {
-    // Extension initialized
+    
     if (status.initialized) {
       this.elements.extensionStatus.textContent = 'Ready';
       this.elements.extensionStatus.className = 'status-value success';
@@ -154,17 +144,17 @@ class VTFPopup {
       this.elements.extensionStatus.className = 'status-value warning';
     }
     
-    // Capture state
+    
     this.updateCaptureState(status.capturing);
     
-    // Active users from content script
+    
     if (status.activeUsers && Array.isArray(status.activeUsers)) {
       this.updateActiveUsers(status.activeUsers);
     }
   }
   
   updateUIFromServiceStatus(status) {
-    // API key status
+    
     if (status.hasApiKey) {
       this.elements.apiKeyStatus.textContent = 'Configured';
       this.elements.apiKeyStatus.className = 'status-value success';
@@ -176,12 +166,12 @@ class VTFPopup {
       this.elements.startBtn.disabled = true;
     }
     
-    // Stats
+    
     if (status.stats) {
       this.elements.transcriptionCount.textContent = status.stats.transcriptionsSent || '0';
     }
     
-    // Active buffers
+    
     if (status.buffers && Array.isArray(status.buffers)) {
       this.updateBufferDisplay(status.buffers);
     }
@@ -208,7 +198,7 @@ class VTFPopup {
     this.elements.activeUsers.textContent = count.toString();
     
     if (count > 0) {
-      // Build speaker cards
+      
       const html = users.map(user => {
         const initials = this.getInitials(user.speaker);
         return `
@@ -231,11 +221,11 @@ class VTFPopup {
   }
   
   updateBufferDisplay(buffers) {
-    // Update active user count from buffers
+    
     const activeBuffers = buffers.filter(b => b.duration > 0);
     
     if (activeBuffers.length > 0 && this.extensionStatus.capturing) {
-      // Merge with content script data if available
+      
       const speakerMap = new Map();
       
       activeBuffers.forEach(buffer => {
@@ -246,7 +236,7 @@ class VTFPopup {
         });
       });
       
-      // Update display
+      
       const users = Array.from(speakerMap.values());
       this.updateActiveUsers(users);
     }
@@ -258,20 +248,19 @@ class VTFPopup {
       return;
     }
     
-    // Disable button during operation
+    
     this.elements.startBtn.disabled = true;
     
     try {
       const action = this.extensionStatus.capturing ? 'stopCapture' : 'startCapture';
       
-      // Send to content script
-      const contentResponse = await this.sendToContent({ type: action });
-      console.log('[VTF Popup] Content response:', contentResponse);
       
-      // Update UI immediately
+      const contentResponse = await this.sendToContent({ type: action });
+      
+      
       this.updateCaptureState(!this.extensionStatus.capturing);
       
-      // Show feedback
+      
       const message = this.extensionStatus.capturing ? 'Capture started' : 'Capture stopped';
       this.showToast(message, 'success');
       
@@ -279,7 +268,7 @@ class VTFPopup {
       console.error('[VTF Popup] Toggle capture error:', error);
       this.showToast('Failed to toggle capture', 'error');
     } finally {
-      // Re-enable button
+      
       setTimeout(() => {
         this.elements.startBtn.disabled = false;
       }, 500);
@@ -287,9 +276,8 @@ class VTFPopup {
   }
   
   async refresh() {
-    console.log('[VTF Popup] Refreshing status...');
     
-    // Visual feedback
+    
     this.elements.refreshBtn.style.transform = 'rotate(360deg)';
     
     await this.checkExtensionState();
@@ -303,7 +291,7 @@ class VTFPopup {
   }
   
   startMonitoring() {
-    // Status updates - faster when capturing
+    
     const updateStatus = () => {
       const interval = this.extensionStatus.capturing ? 1000 : 3000;
       
@@ -316,7 +304,7 @@ class VTFPopup {
     };
     updateStatus();
     
-    // Transcription updates
+    
     const updateTranscriptions = () => {
       this.transcriptionInterval = setTimeout(async () => {
         if (document.visibilityState === 'visible' && this.extensionStatus.capturing) {
@@ -327,7 +315,7 @@ class VTFPopup {
     };
     updateTranscriptions();
     
-    // Initial transcription load
+    
     this.loadTranscriptions();
   }
   
@@ -350,7 +338,7 @@ class VTFPopup {
       return;
     }
     
-    // Show most recent 15
+    
     const recent = transcriptions.slice(-15).reverse();
     
     const html = recent.map(trans => {
@@ -375,29 +363,28 @@ class VTFPopup {
   }
   
   handleRealtimeUpdate(message) {
-    console.log('[VTF Popup] Realtime update:', message.type);
     
     switch (message.type) {
       case 'transcription':
-        // New transcription arrived - reload list
+        
         this.loadTranscriptions();
         break;
         
       case 'captureStarted':
       case 'captureStopped':
-        // State changed - update UI
+        
         this.checkExtensionState();
         break;
         
       case 'bufferStatus':
-        // Update buffer display
+        
         if (message.data && message.data.buffers) {
           this.updateBufferDisplay(message.data.buffers);
         }
         break;
         
       case 'extensionInitialized':
-        // Extension just initialized
+        
         this.checkExtensionState();
         this.showToast('Extension ready', 'success');
         break;
@@ -448,7 +435,7 @@ class VTFPopup {
     this.elements.stateMessage.textContent = message;
     this.elements.extensionState.classList.remove('hidden');
     
-    // Update color based on type
+    
     this.elements.extensionState.style.background = 
       type === 'error' ? '#fee' : 
       type === 'warning' ? '#fff3cd' : 
@@ -460,7 +447,7 @@ class VTFPopup {
   }
   
   showToast(message, type = 'info') {
-    // Remove any existing toast
+    
     const existing = document.querySelector('.message-toast');
     if (existing) existing.remove();
     
@@ -519,13 +506,11 @@ class VTFPopup {
   }
 }
 
-// Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('[VTF Popup] DOM loaded, creating popup instance');
+  
   window.vtfPopup = new VTFPopup();
 });
 
-// Cleanup on unload
 window.addEventListener('unload', () => {
   if (window.vtfPopup) {
     window.vtfPopup.destroy();

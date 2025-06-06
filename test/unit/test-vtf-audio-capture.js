@@ -1,24 +1,11 @@
-// test/unit/test-vtf-audio-capture.js
-/**
- * VTFAudioCapture Test Suite
- * 
- * Run in Chrome DevTools:
- * 1. Open VTF page (vtf.t3live.com)
- * 2. Open DevTools Console
- * 3. Copy and paste this entire file
- * 4. Tests will run automatically
- */
 
-console.log('[Test VTFAudioCapture] Loading test suite...');
 
-// Mock dependencies
 const mockChrome = {
   runtime: {
-    getURL: (path) => `chrome-extension://test-id/${path}`
+    getURL: (path) => `chrome-extension:
   }
 };
 
-// Mock AudioWorklet
 class MockAudioWorkletNode {
   constructor(context, name, options) {
     this.context = context;
@@ -27,7 +14,7 @@ class MockAudioWorkletNode {
     this.port = {
       onmessage: null,
       postMessage: (msg) => {
-        // Simulate worklet responses
+        
         if (msg.command === 'getStats') {
           setTimeout(() => {
             if (this.port.onmessage) {
@@ -45,7 +32,7 @@ class MockAudioWorkletNode {
       }
     };
     
-    // Auto-send initialized message
+    
     setTimeout(() => {
       if (this.port.onmessage) {
         this.port.onmessage({ 
@@ -62,7 +49,6 @@ class MockAudioWorkletNode {
   disconnect() {}
 }
 
-// Mock AudioContext
 class MockAudioContext {
   constructor(options) {
     this.sampleRate = options?.sampleRate || 48000;
@@ -70,16 +56,16 @@ class MockAudioContext {
     this.currentTime = 0;
     this.baseLatency = 0.01;
     
-    // Mock audioWorklet
+    
     this.audioWorklet = {
       addModule: async (url) => {
-        console.log(`[Mock] Loading worklet from: ${url}`);
-        // Simulate successful load
+        
+        
         return Promise.resolve();
       }
     };
     
-    // Track created nodes
+    
     this.createdNodes = [];
   }
   
@@ -112,7 +98,7 @@ class MockAudioContext {
     };
     this.createdNodes.push(processor);
     
-    // Simulate audio processing
+    
     if (bufferSize > 0) {
       setTimeout(() => {
         if (processor.onaudioprocess) {
@@ -136,7 +122,6 @@ class MockAudioContext {
   }
 }
 
-// Mock MediaStream
 class MockMediaStream {
   constructor() {
     this.id = 'mock-stream-' + Math.random();
@@ -163,22 +148,21 @@ class MockMediaStreamTrack {
   }
 }
 
-// Store originals
 const originalChrome = window.chrome;
 const originalAudioContext = window.AudioContext;
 const originalAudioWorkletNode = window.AudioWorkletNode;
 
 async function runTests() {
-  console.log('\n[Test Runner] Starting VTFAudioCapture tests...\n');
+  
   let passed = 0;
   let failed = 0;
 
-  // Helper function
+  
   async function test(name, fn) {
     try {
-      console.log(`[Test] ${name}...`);
+      
       await fn();
-      console.log(`✅ ${name} - PASSED`);
+      
       passed++;
     } catch (error) {
       console.error(`❌ ${name} - FAILED:`, error.message);
@@ -187,12 +171,12 @@ async function runTests() {
     }
   }
 
-  // Override globals
+  
   window.chrome = mockChrome;
   window.AudioContext = MockAudioContext;
   window.AudioWorkletNode = MockAudioWorkletNode;
 
-  // Import VTFAudioWorkletNode stub for testing
+  
   window.VTFAudioWorkletNode = class {
     constructor(context, userId, options) {
       this.context = context;
@@ -211,7 +195,7 @@ async function runTests() {
     
     onAudioData(callback) {
       this.audioDataCallback = callback;
-      // Simulate audio data
+      
       setTimeout(() => {
         if (callback) {
           callback({
@@ -228,7 +212,7 @@ async function runTests() {
     destroy() { this.isInitialized = false; }
   };
 
-  // Test 1: AudioContext initialization
+  
   await test('AudioContext initialization', async () => {
     const capture = new VTFAudioCapture();
     
@@ -251,9 +235,9 @@ async function runTests() {
     }
   });
 
-  // Test 2: AudioWorklet loading and fallback
+  
   await test('AudioWorklet loading and fallback', async () => {
-    // Test successful worklet load
+    
     const capture1 = new VTFAudioCapture();
     await capture1.initialize();
     
@@ -261,10 +245,10 @@ async function runTests() {
       throw new Error('Worklet should be ready');
     }
     
-    // Test fallback when worklet fails
+    
     const capture2 = new VTFAudioCapture();
     capture2.audioContext = new MockAudioContext();
-    capture2.audioContext.audioWorklet = null; // No worklet support
+    capture2.audioContext.audioWorklet = null; 
     
     await capture2.loadAudioWorklet();
     
@@ -273,17 +257,17 @@ async function runTests() {
     }
   });
 
-  // Test 3: Stream capture from elements
+  
   await test('Stream capture from elements', async () => {
     const capture = new VTFAudioCapture();
     await capture.initialize();
     
-    // Create mock element and stream
+    
     const element = document.createElement('audio');
     element.id = 'msRemAudio-testUser';
     const stream = new MockMediaStream();
     
-    // Capture
+    
     await capture.captureElement(element, stream, 'testUser');
     
     if (capture.captures.size !== 1) {
@@ -303,7 +287,7 @@ async function runTests() {
       throw new Error('Stream not stored correctly');
     }
     
-    // Wait for audio data
+    
     await new Promise(resolve => setTimeout(resolve, 150));
     
     if (capture.stats.capturesStarted !== 1) {
@@ -311,12 +295,12 @@ async function runTests() {
     }
   });
 
-  // Test 4: Volume synchronization
+  
   await test('Volume synchronization', async () => {
     const capture = new VTFAudioCapture();
     await capture.initialize();
     
-    // Set mock VTF volume
+    
     window.globals = { audioVolume: 0.5 };
     
     const element = document.createElement('audio');
@@ -329,23 +313,23 @@ async function runTests() {
       throw new Error(`Expected volume 0.5, got ${captureInfo.gainNode.gain.value}`);
     }
     
-    // Update volume
+    
     capture.updateVolume(0.75);
     
     if (captureInfo.gainNode.gain.value !== 0.75) {
       throw new Error('Volume not updated');
     }
     
-    // Cleanup
+    
     delete window.globals;
   });
 
-  // Test 5: Multiple user handling
+  
   await test('Multiple user handling', async () => {
     const capture = new VTFAudioCapture();
     await capture.initialize();
     
-    // Capture multiple users
+    
     const users = ['user1', 'user2', 'user3'];
     
     for (const userId of users) {
@@ -360,7 +344,7 @@ async function runTests() {
       throw new Error(`Expected 3 captures, got ${capture.captures.size}`);
     }
     
-    // Stop one user
+    
     capture.stopCapture('user2');
     
     if (capture.captures.size !== 2) {
@@ -371,7 +355,7 @@ async function runTests() {
       throw new Error('Wrong user removed');
     }
     
-    // Stop all
+    
     const stopped = capture.stopAll();
     
     if (stopped !== 2) {
@@ -383,12 +367,12 @@ async function runTests() {
     }
   });
 
-  // Test 6: Error handling - invalid inputs
+  
   await test('Error handling - invalid inputs', async () => {
     const capture = new VTFAudioCapture();
     await capture.initialize();
     
-    // Test invalid element
+    
     try {
       await capture.captureElement(null, new MockMediaStream(), 'user1');
       throw new Error('Should reject null element');
@@ -398,7 +382,7 @@ async function runTests() {
       }
     }
     
-    // Test invalid stream
+    
     try {
       const element = document.createElement('audio');
       await capture.captureElement(element, null, 'user1');
@@ -409,7 +393,7 @@ async function runTests() {
       }
     }
     
-    // Test invalid userId
+    
     try {
       const element = document.createElement('audio');
       await capture.captureElement(element, new MockMediaStream(), '');
@@ -421,7 +405,7 @@ async function runTests() {
     }
   });
 
-  // Test 7: Track state monitoring
+  
   await test('Track state monitoring', async () => {
     const capture = new VTFAudioCapture();
     await capture.initialize();
@@ -432,7 +416,7 @@ async function runTests() {
     
     await capture.captureElement(element, stream, 'trackUser');
     
-    // Simulate track ended
+    
     track.readyState = 'ended';
     if (track.onended) {
       track.onended();
@@ -445,10 +429,10 @@ async function runTests() {
     }
   });
 
-  // Test 8: ScriptProcessor fallback
+  
   await test('ScriptProcessor fallback', async () => {
     const capture = new VTFAudioCapture();
-    capture.workletReady = false; // Force fallback
+    capture.workletReady = false; 
     
     await capture.initialize();
     
@@ -462,7 +446,7 @@ async function runTests() {
       throw new Error('Should use script processor as fallback');
     }
     
-    // Wait for audio processing
+    
     await new Promise(resolve => setTimeout(resolve, 150));
     
     if (capture.stats.fallbackUsed !== 1) {
@@ -470,19 +454,19 @@ async function runTests() {
     }
   });
 
-  // Test 9: Cleanup and destruction
+  
   await test('Cleanup and destruction', async () => {
     const capture = new VTFAudioCapture();
     await capture.initialize();
     
-    // Add some captures
+    
     for (let i = 0; i < 3; i++) {
       const element = document.createElement('audio');
       const stream = new MockMediaStream();
       await capture.captureElement(element, stream, `user${i}`);
     }
     
-    // Destroy
+    
     capture.destroy();
     
     if (capture.captures.size !== 0) {
@@ -498,19 +482,19 @@ async function runTests() {
     }
   });
 
-  // Test 10: Maximum captures limit
+  
   await test('Maximum captures limit', async () => {
     const capture = new VTFAudioCapture({ maxCaptures: 3 });
     await capture.initialize();
     
-    // Add captures up to limit
+    
     for (let i = 0; i < 3; i++) {
       const element = document.createElement('audio');
       const stream = new MockMediaStream();
       await capture.captureElement(element, stream, `maxUser${i}`);
     }
     
-    // Try to exceed limit
+    
     try {
       const element = document.createElement('audio');
       const stream = new MockMediaStream();
@@ -523,17 +507,17 @@ async function runTests() {
     }
   });
 
-  // Test 11: Statistics and debug info
+  
   await test('Statistics and debug info', async () => {
     const capture = new VTFAudioCapture();
     await capture.initialize();
     
-    // Add a capture
+    
     const element = document.createElement('audio');
     const stream = new MockMediaStream();
     await capture.captureElement(element, stream, 'statsUser');
     
-    // Get stats for specific capture
+    
     const userStats = capture.getCaptureStats('statsUser');
     if (!userStats) {
       throw new Error('User stats not available');
@@ -543,13 +527,13 @@ async function runTests() {
       throw new Error('Wrong user stats returned');
     }
     
-    // Get all stats
+    
     const allStats = capture.getAllStats();
     if (allStats.activeCaptures !== 1) {
       throw new Error('Active captures count wrong');
     }
     
-    // Get debug info
+    
     const debug = capture.debug();
     if (!debug.isInitialized) {
       throw new Error('Debug shows not initialized');
@@ -560,24 +544,23 @@ async function runTests() {
     }
   });
 
-  // Restore globals
+  
   window.chrome = originalChrome;
   window.AudioContext = originalAudioContext;
   window.AudioWorkletNode = originalAudioWorkletNode;
   delete window.VTFAudioWorkletNode;
 
-  // Summary
-  console.log(`\n[Test Runner] VTFAudioCapture tests complete: ${passed} passed, ${failed} failed`);
+  
+  
   if (failed > 0) {
     console.error(`\n⚠️  ${failed} tests failed!`);
   } else {
-    console.log('\n✅ All tests passed!');
+    
   }
   
   return { passed, failed };
 }
 
-// Run tests automatically
 runTests().then(results => {
-  console.log('\n[Test VTFAudioCapture] Test suite completed');
+  
 });
