@@ -787,17 +787,21 @@ if (document.readyState === 'loading') {
 }
 
 async function initializeExtension() {
-  
-  
+  console.log('[VTF Extension] Creating extension instance...');
+  // Create the extension object FIRST, before init
   window.vtfExtension = new VTFAudioExtension();
-  
+  console.log('[VTF Extension] Instance created');
+  // Now try to initialize
   try {
     await window.vtfExtension.init();
+    console.log('[VTF Extension] Initialization complete');
   } catch (error) {
     console.error('[VTF Extension] Failed to initialize:', error);
+    // Extension object still exists for debugging even if init failed
   }
 }
 
+// Also ensure cleanup still works
 window.addEventListener('beforeunload', () => {
   if (window.vtfExtension) {
     window.vtfExtension.destroy();
