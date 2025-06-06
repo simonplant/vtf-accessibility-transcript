@@ -1,0 +1,58 @@
+{
+    "manifest_version": 3,
+    "name": "VTF Audio Transcription",
+    "version": "0.5.0",
+    "description": "Real-time audio capture and transcription for Virtual Trading Floor",
+    
+    "author": "Simon Plant",
+    "homepage_url": "https://github.com/simonplant/vtf-audio-extension",
+    
+    "minimum_chrome_version": "102",
+    
+    "icons": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    
+    "background": {
+      "service_worker": "background.js",
+      "type": "module"
+    },
+    
+    "content_scripts": [{
+      "matches": ["*://vtf.t3live.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }],
+    
+    "permissions": [
+      "storage",
+      "tabs"
+    ],
+    
+    "host_permissions": [
+      "https://api.openai.com/*"
+    ],
+    
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": {
+        "16": "icons/icon16.png",
+        "24": "icons/icon24.png",
+        "32": "icons/icon32.png"
+      },
+      "default_title": "VTF Audio Transcription"
+    },
+    
+    "options_page": "options.html",
+    
+    "web_accessible_resources": [{
+      "resources": [
+        "workers/audio-worklet.js",
+        "modules/*.js"
+      ],
+      "matches": ["*://vtf.t3live.com/*"]
+    }]
+  }
