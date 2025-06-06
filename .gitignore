@@ -11,3 +11,6 @@ TREE.txt
 package-lock.json
 */.DS_Store
 src/.DS_Store
+.DS_Store
+*.swp
+*.log
