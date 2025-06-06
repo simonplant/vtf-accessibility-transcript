@@ -1,11 +1,8 @@
-// Replace your vtf-globals-finder.js with this version that handles timing better:
-
 export class VTFGlobalsFinder {
   constructor() {
     this.globals = null;
     this.appService = null;
     this.mediaSoupService = null;
-    this.roomComponent = null;
     this.attempts = 0;
   }
   
@@ -13,15 +10,12 @@ export class VTFGlobalsFinder {
     console.log('[VTF Globals] Starting search...');
     this.attempts = 0;
     
-    // First, wait for the elements to exist
-    await this.waitForElements();
-    
-    // Then wait for Angular context
     for (let i = 0; i < maxRetries; i++) {
       if (this.findGlobals()) {
         console.log(`[VTF Globals] Found after ${i * interval}ms`);
         return true;
       }
+      
       this.attempts++;
       
       if (i % 10 === 0 && i > 0) {
@@ -31,64 +25,58 @@ export class VTFGlobalsFinder {
       await new Promise(resolve => setTimeout(resolve, interval));
     }
     
-    console.error('[VTF Globals] Timeout - Angular context not found');
+    console.error('[VTF Globals] Timeout after', maxRetries * interval / 1000, 'seconds');
     return false;
   }
   
-  async waitForElements() {
-    console.log('[VTF Globals] Waiting for DOM elements...');
-    
-    for (let i = 0; i < 20; i++) {
-      const room = document.getElementById('topRoomDiv');
-      const webcam = document.getElementById('webcam');
-      
-      if (room || webcam) {
-        console.log('[VTF Globals] Elements found');
-        return;
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    
-    console.warn('[VTF Globals] Elements not found after 10 seconds');
-  }
-  
   findGlobals() {
-    // Check topRoomDiv first (has full services)
-    const room = document.getElementById('topRoomDiv');
-    if (room?.__ngContext__) {
-      // Log what we see
-      if (this.attempts === 0 || this.attempts % 10 === 0) {
-        console.log(`[VTF Globals] topRoomDiv context length: ${room.__ngContext__.length}`);
-      }
-      
-      // Check index 31
-      if (room.__ngContext__[31]?.appService?.globals) {
-        this.globals = room.__ngContext__[31].appService.globals;
-        this.appService = room.__ngContext__[31].appService;
-        this.mediaSoupService = room.__ngContext__[31].mediaSoupService;
-        this.roomComponent = room.__ngContext__[31];
-        console.log('[VTF Globals] Found via topRoomDiv[31]');
-        return true;
+    // Strategy 1: Check DOM elements for Angular context
+    const topRoom = document.getElementById('topRoomDiv');
+    const webcam = document.getElementById('webcam');
+    
+    // Try topRoomDiv first - it usually has the full context
+    if (topRoom && topRoom.__ngContext__) {
+      // Just scan through all indices - don't assume a specific one
+      for (let i = 0; i < topRoom.__ngContext__.length; i++) {
+        const ctx = topRoom.__ngContext__[i];
+        if (ctx && typeof ctx === 'object' && ctx.appService?.globals) {
+          this.globals = ctx.appService.globals;
+          this.appService = ctx.appService;
+          this.mediaSoupService = ctx.mediaSoupService;
+          console.log(`[VTF Globals] Found at topRoomDiv.__ngContext__[${i}]`);
+          return true;
+        }
       }
     }
     
-    // Fallback to webcam element
-    const webcam = document.getElementById('webcam');
-    if (webcam?.__ngContext__) {
-      // Check index 8
-      if (webcam.__ngContext__[8]?.appService?.globals) {
-        this.globals = webcam.__ngContext__[8].appService.globals;
-        this.appService = webcam.__ngContext__[8].appService;
-        
-        // Try to get MediaSoup from room element
-        if (room?.__ngContext__?.[31]?.mediaSoupService) {
-          this.mediaSoupService = room.__ngContext__[31].mediaSoupService;
-          this.roomComponent = room.__ngContext__[31];
+    // Try webcam element as fallback
+    if (webcam && webcam.__ngContext__) {
+      for (let i = 0; i < webcam.__ngContext__.length; i++) {
+        const ctx = webcam.__ngContext__[i];
+        if (ctx && typeof ctx === 'object' && ctx.appService?.globals) {
+          this.globals = ctx.appService.globals;
+          this.appService = ctx.appService;
+          console.log(`[VTF Globals] Found at webcam.__ngContext__[${i}]`);
+          return true;
         }
-        
-        console.log('[VTF Globals] Found via webcam[8]');
-        return true;
+      }
+    }
+    
+    // Strategy 2: Look for VTF functions that might expose globals
+    if (typeof window.adjustVol === 'function') {
+      // VTF's adjustVol function often references this.appService.globals
+      try {
+        // Create a test element to see if we can find the context
+        const testAudio = document.querySelector('audio[id^="msRemAudio-"]');
+        if (testAudio) {
+          const parent = testAudio.parentElement;
+          if (parent && parent.__ngContext__) {
+            console.log('[VTF Globals] Found context via audio element parent');
+            // Similar search through context
+          }
+        }
+      } catch (e) {
+        // Ignore errors
       }
     }
     
@@ -96,23 +84,25 @@ export class VTFGlobalsFinder {
   }
   
   debug() {
+    const topRoom = document.getElementById('topRoomDiv');
+    const webcam = document.getElementById('webcam');
+    
     return {
       found: !!this.globals,
       attempts: this.attempts,
-      globals: this.globals ? {
-        audioVolume: this.globals.audioVolume,
-        sessionState: this.globals.sessData?.currentState,
-        propertyCount: Object.keys(this.globals).length
-      } : null,
-      services: {
-        appService: !!this.appService,
-        mediaSoupService: !!this.mediaSoupService,
-        roomComponent: !!this.roomComponent
-      },
       elements: {
-        topRoomDiv: !!document.getElementById('topRoomDiv'),
-        webcam: !!document.getElementById('webcam')
-      }
+        topRoomDiv: !!topRoom,
+        topRoomContext: topRoom ? !!topRoom.__ngContext__ : false,
+        topRoomContextLength: topRoom?.__ngContext__?.length || 0,
+        webcam: !!webcam,
+        webcamContext: webcam ? !!webcam.__ngContext__ : false,
+        webcamContextLength: webcam?.__ngContext__?.length || 0
+      },
+      globals: this.globals ? {
+        hasAudioVolume: !!this.globals.audioVolume,
+        audioVolume: this.globals.audioVolume,
+        properties: Object.keys(this.globals).length
+      } : null
     };
   }
   
@@ -120,7 +110,6 @@ export class VTFGlobalsFinder {
     this.globals = null;
     this.appService = null;
     this.mediaSoupService = null;
-    this.roomComponent = null;
   }
 }
 
