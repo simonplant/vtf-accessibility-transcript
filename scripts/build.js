@@ -92,7 +92,7 @@ async function bundleContentScript() {
     const result = await esbuild.build({
       entryPoints: [resolve('src/content.js')],
       bundle: true,
-      outfile: resolve('dist/content-bundle.js'),
+      outfile: resolve('dist/content.js'),
       format: 'iife',
       target: 'chrome102',
       sourcemap: process.env.NODE_ENV !== 'production',
@@ -107,7 +107,7 @@ async function bundleContentScript() {
     });
     
     // Report bundle size
-    const stats = await fs.stat(resolve('dist/content-bundle.js'));
+    const stats = await fs.stat(resolve('dist/content.js'));
     const sizeKB = (stats.size / 1024).toFixed(2);
     log.success(`Bundled content script (${sizeKB} KB)`);
     
@@ -129,7 +129,7 @@ async function validateBuild() {
   
   const requiredFiles = [
     'manifest.json',
-    'content-bundle.js',
+    'content.js',
     'background.js',
     'popup.html',
     'popup.js',
