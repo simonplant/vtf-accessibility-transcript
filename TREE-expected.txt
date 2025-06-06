@@ -7,11 +7,11 @@ vtf-audio-extension/
 │       └── refactor_task.md
 ├── docs/
 │   ├── design/
-│   │   ├── vtf-complete-design-v3.md
-│   │   ├── vtf-audio-specification-v2.md
+│   │   ├── vtf-complete-design-v3.md   DONE
+│   │   ├── vtf-audio-specification-v2.md   DONE
 │   │   └── architecture-diagrams/
 │   ├── legacy/
-│   │   └── original-implementation-notes.md
+│   │   └── legacy/code-analysis-results.md
 │   └── testing/
 │       ├── test-plan.md
 │       └── test-results/
@@ -22,21 +22,21 @@ vtf-audio-extension/
 │   │   ├── background.js
 │   │   └── manifest.json
 │   ├── modules/                     # New refactored modules
-│   │   ├── vtf-globals-finder.js - DONE
-│   │   ├── vtf-stream-monitor.js
-│   │   ├── vtf-audio-capture.js
-│   │   ├── vtf-state-monitor.js
+│   │   ├── vtf-globals-finder.js       DONE
+│   │   ├── vtf-stream-monitor.js       DONE
+│   │   ├── vtf-audio-capture.js        !! NOT DONE !!
+│   │   ├── vtf-state-monitor.js        DONE
 │   │   └── audio-data-transfer.js
 │   ├── workers/
 │   │   └── audio-worklet.js
-│   ├── content.js                   # New main content script
-│   ├── background.js                # New service worker
-│   └── manifest.json                # New manifest v3
+│   ├── content.js 
+│   ├── background.js
+│   └── manifest.json
 ├── test/
 │   ├── unit/
-│   │   ├── test-globals-finder.js
-│   │   ├── test-stream-monitor.js
-│   │   └── test-audio-capture.js
+│   │   ├── test-globals-finder.js      DONE
+│   │   ├── test-stream-monitor.js      DONE
+│   │   └── test-audio-capture.js       !! NOT DONE !!
 │   ├── integration/
 │   │   └── test-vtf-integration.js
 │   ├── mocks/
