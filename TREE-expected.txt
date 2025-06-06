@@ -1,0 +1,56 @@
+vtf-audio-extension/
+├── .github/
+│   ├── workflows/
+│   │   └── test.yml                 # GitHub Actions for automated testing
+│   └── ISSUE_TEMPLATE/
+│       ├── bug_report.md
+│       └── refactor_task.md
+├── docs/
+│   ├── design/
+│   │   ├── vtf-complete-design-v3.md
+│   │   ├── vtf-audio-specification-v2.md
+│   │   └── architecture-diagrams/
+│   ├── legacy/
+│   │   └── original-implementation-notes.md
+│   └── testing/
+│       ├── test-plan.md
+│       └── test-results/
+├── src/
+│   ├── legacy/                      # Current working version
+│   │   ├── inject.js               # Mark as @deprecated
+│   │   ├── content.js
+│   │   ├── background.js
+│   │   └── manifest.json
+│   ├── modules/                     # New refactored modules
+│   │   ├── vtf-globals-finder.js - DONE
+│   │   ├── vtf-stream-monitor.js
+│   │   ├── vtf-audio-capture.js
+│   │   ├── vtf-state-monitor.js
+│   │   └── audio-data-transfer.js
+│   ├── workers/
+│   │   └── audio-worklet.js
+│   ├── content.js                   # New main content script
+│   ├── background.js                # New service worker
+│   └── manifest.json                # New manifest v3
+├── test/
+│   ├── unit/
+│   │   ├── test-globals-finder.js
+│   │   ├── test-stream-monitor.js
+│   │   └── test-audio-capture.js
+│   ├── integration/
+│   │   └── test-vtf-integration.js
+│   ├── mocks/
+│   │   └── vtf-mock.html
+│   └── utils/
+│       └── test-helpers.js
+├── dist/                            # Build output (gitignored)
+├── scripts/
+│   ├── build.js                     # Build script
+│   ├── test.js                      # Test runner
+│   └── migrate-settings.js          # Migration helper
+├── .gitignore
+├── .eslintrc.js
+├── README.md
+├── CHANGELOG.md
+├── package.json
+└── LICENSE
