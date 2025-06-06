@@ -45,14 +45,6 @@ class VTFTranscriptionService {
     };
     
     
-    this.legacyMessageMap = {
-      'audioData': 'audioChunk',
-      'start_capture': 'startCapture',
-      'stop_capture': 'stopCapture',
-      'getTranscriptions': 'getStatus'
-    };
-    
-    
     this.keepAliveTimer = null;
   }
   
@@ -102,11 +94,8 @@ class VTFTranscriptionService {
   
   async handleMessage(request, sender) {
     
-    const messageType = this.mapLegacyMessageType(request);
-    
-    
     try {
-      switch (messageType) {
+      switch (request.type) {
         case 'audioChunk':
           return await this.handleAudioChunk(request);
           
@@ -155,8 +144,22 @@ class VTFTranscriptionService {
           await this.updateSpeakerMapping(request.userId, request.speakerName);
           return { updated: true };
           
+        case 'debug':
+          return { userBuffers: Array.from(this.userBuffers.keys()), stats: { ...this.stats } };
+          
+        case 'updateSettings':
+          if (request.settings) {
+            Object.assign(this.config, request.settings.config || request.settings);
+            if (request.settings.apiEndpoint) {
+              this.whisperEndpoint = request.settings.apiEndpoint;
+            }
+            await chrome.storage.local.set({ settings: this.config });
+            return { updated: true };
+          }
+          return { updated: false, error: 'No settings provided' };
+          
         default:
-          throw new Error(`Unknown message type: ${messageType}`);
+          throw new Error(`Unknown message type: ${request.type}`);
       }
     } catch (error) {
       console.error('[Service Worker] Error handling message:', error);
@@ -165,68 +168,22 @@ class VTFTranscriptionService {
   }
   
   
-  mapLegacyMessageType(request) {
-    
-    if (request.type === 'audioData' && request.audioData) {
-      request.type = 'audioChunk';
-      request.chunk = request.audioData;
-      
-      
-      if (request.streamId && request.streamId.includes('msRemAudio-')) {
-        request.userId = request.streamId.replace('msRemAudio-', '');
-      }
-      
-      
-      if (!request.userId && request.chunkNumber) {
-        request.userId = 'legacy-user';
-      }
-    }
-    
-    return this.legacyMessageMap[request.type] || request.type;
-  }
-  
-  
   async handleAudioChunk(request) {
-    const { userId, chunk, timestamp, sampleRate = 16000 } = request;
-    
-    if (!userId || !chunk || chunk.length === 0) {
-      
-      return { received: false, error: 'Invalid audio data' };
+    const { userId, chunk, timestamp, sampleRate } = request;
+    if (!userId || !chunk || !Array.isArray(chunk)) {
+      console.error('[background] Invalid audioChunk payload', request);
+      this.stats.errors++;
+      return { error: 'Invalid payload' };
     }
-    
-    this.stats.chunksReceived++;
-    this.stats.bytesProcessed += chunk.length * 2; 
-    
-    
     if (!this.userBuffers.has(userId)) {
-      
-      this.userBuffers.set(userId, new UserBufferManager(userId, this.config));
+      this.userBuffers.set(userId, { chunks: [], totalSamples: 0 });
     }
-    
-    const buffer = this.userBuffers.get(userId);
-    
-    
-    const float32Data = this.int16ToFloat32(chunk);
-    
-    
-    buffer.addChunk(float32Data, timestamp);
-    
-    
-    
-    if (buffer.isReadyToTranscribe()) {
-      
-      
-      this.transcribeUserBuffer(userId);
-    }
-    
-    
-    this.broadcastBufferStatus();
-    
-    return { 
-      received: true, 
-      bufferSize: buffer.totalSamples,
-      bufferDuration: buffer.totalSamples / sampleRate
-    };
+    const buf = this.userBuffers.get(userId);
+    buf.chunks.push({ chunk, timestamp });
+    buf.totalSamples += chunk.length;
+    this.stats.chunksReceived++;
+    console.log(`[background] Received chunk for user ${userId}, size: ${chunk.length}`);
+    return { status: 'ok' };
   }
   
   

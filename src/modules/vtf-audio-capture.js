@@ -1,12 +1,5 @@
-
-
 import { VTFAudioWorkletNode } from './vtf-audio-worklet-node.js';
-
-class AudioDataTransfer {
-  sendAudioData(userId, samples) {
-    
-  }
-}
+import { AudioDataTransfer } from './audio-data-transfer.js';
 
 export class VTFAudioCapture {
   constructor(options = {}) {
@@ -25,7 +18,7 @@ export class VTFAudioCapture {
     this.audioContext = null;
     this.workletReady = false;
     this.captures = new Map();
-    this.dataTransfer = null;
+    this.dataTransfer = new AudioDataTransfer();
     this.globalsFinder = null;
     
     
@@ -63,9 +56,6 @@ export class VTFAudioCapture {
         await this.audioContext.resume();
         
       }
-      
-      
-      this.dataTransfer = new AudioDataTransfer();
       
       
       await this.loadAudioWorklet();

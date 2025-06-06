@@ -1,5 +1,3 @@
-
-
 import { VTFGlobalsFinder } from './modules/vtf-globals-finder.js';
 import { VTFStreamMonitor } from './modules/vtf-stream-monitor.js';
 import { VTFStateMonitor } from './modules/vtf-state-monitor.js';
@@ -42,14 +40,6 @@ class VTFAudioExtension {
       capturesFailed: 0,
       reconnects: 0,
       errors: 0
-    };
-    
-    
-    this.legacyMessageMap = {
-      'audioData': 'audioChunk',
-      'start_capture': 'startCapture', 
-      'stop_capture': 'stopCapture',
-      'getTranscriptions': 'getStatus'
     };
   }
   
@@ -433,7 +423,7 @@ class VTFAudioExtension {
   setupMessageHandlers() {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       
-      const messageType = this.legacyMessageMap[request.type] || request.type;
+      const messageType = request.type;
       
       
       switch (messageType) {

@@ -2,15 +2,9 @@
 
 const fs = require('fs').promises;
 const path = require('path');
-const glob = require('glob');
-let log, showHeader;
-try {
-  ({ log, showHeader } = require('./shared'));
-} catch {}
 
 async function clean() {
-  if (showHeader) showHeader('Clean Build Artifacts');
-  else 
+  console.log('Clean Build Artifacts');
   
   const toClean = [
     'dist',
@@ -19,26 +13,27 @@ async function clean() {
 
   for (const item of toClean) {
     try {
-      await fs.rm(item, { recursive: true, force: true });
-      log ? log.success(`Removed ${item}`) : 
+      await fs.rm(path.resolve(__dirname, '..', item), { recursive: true, force: true });
+      console.log(`✓ Removed ${item}`);
     } catch (error) {
-      
+      // Ignore errors for missing directories
     }
   }
 
-  
-  const zipFiles = glob.sync('vtf-audio-extension*.zip');
-  for (const zip of zipFiles) {
-    try {
-      await fs.rm(zip, { force: true });
-      log ? log.success(`Removed ${zip}`) : 
-    } catch (error) {
-      
+  // Remove zip files
+  try {
+    const files = await fs.readdir(path.resolve(__dirname, '..'));
+    for (const file of files) {
+      if (file.match(/vtf-audio-extension.*\.zip$/)) {
+        await fs.rm(path.resolve(__dirname, '..', file));
+        console.log(`✓ Removed ${file}`);
+      }
     }
+  } catch (error) {
+    // Ignore
   }
 
-  if (log) log.success('Clean complete');
-  else 
+  console.log('✓ Clean complete');
 }
 
-clean();
+clean().catch(console.error);

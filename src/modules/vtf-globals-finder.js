@@ -1,135 +1,57 @@
-
+// Replace your src/modules/vtf-globals-finder.js with this:
 
 export class VTFGlobalsFinder {
-  constructor(options = {}) {
-    this.config = {
-      pollInterval: 500,
-      maxAttempts: 60,
-      ...options
-    };
-    
-    
-    this.componentLocations = {
-      app: { elementId: 'webcam', contextIndex: 8 },
-      room: { elementId: 'topRoomDiv', contextIndex: 31 }
-    };
-    
-    
+  constructor() {
     this.globals = null;
     this.appService = null;
     this.mediaSoupService = null;
     this.roomComponent = null;
-    
-    
     this.attempts = 0;
   }
   
-  
-  async waitForGlobals() {
-    
+  async waitForGlobals(maxRetries = 60, interval = 500) {
+    console.log('[VTF Globals] Starting search...');
     this.attempts = 0;
     
-    while (this.attempts < this.config.maxAttempts) {
+    for (let i = 0; i < maxRetries; i++) {
       if (this.findGlobals()) {
-        
+        console.log(`[VTF Globals] Found after ${i * interval}ms`);
         return true;
       }
-      
       this.attempts++;
-      
-      
-      if (this.attempts % 10 === 0) {
-        
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, this.config.pollInterval));
+      await new Promise(resolve => setTimeout(resolve, interval));
     }
     
     console.error('[VTF Globals] Timeout - Angular context not found');
     return false;
   }
   
-  
   findGlobals() {
-    
-    if (this.globals && this.isValidGlobals(this.globals)) {
+    // This is the fix - directly access the Angular context
+    const room = document.getElementById('topRoomDiv');
+    if (room?.__ngContext__?.[31]?.appService?.globals) {
+      this.globals = room.__ngContext__[31].appService.globals;
+      this.appService = room.__ngContext__[31].appService;
+      this.mediaSoupService = room.__ngContext__[31].mediaSoupService;
+      this.roomComponent = room.__ngContext__[31];
       return true;
     }
     
-    
-    const appElement = document.getElementById(this.componentLocations.app.elementId);
-    if (appElement?.__ngContext__) {
-      const appComponent = appElement.__ngContext__[this.componentLocations.app.contextIndex];
-      
-      if (appComponent?.appService?.globals) {
-        if (this.isValidGlobals(appComponent.appService.globals)) {
-          
-          this.globals = appComponent.appService.globals;
-          this.appService = appComponent.appService;
-          
-          
-          this.findRoomComponent();
-          
-          return true;
-        }
+    // Fallback to webcam element
+    const webcam = document.getElementById('webcam');
+    if (webcam?.__ngContext__?.[8]?.appService?.globals) {
+      this.globals = webcam.__ngContext__[8].appService.globals;
+      this.appService = webcam.__ngContext__[8].appService;
+      // Try to get MediaSoup from room element
+      if (room?.__ngContext__?.[31]?.mediaSoupService) {
+        this.mediaSoupService = room.__ngContext__[31].mediaSoupService;
+        this.roomComponent = room.__ngContext__[31];
       }
-    }
-    
-    
-    const roomElement = document.getElementById(this.componentLocations.room.elementId);
-    if (roomElement?.__ngContext__) {
-      const roomComponent = roomElement.__ngContext__[this.componentLocations.room.contextIndex];
-      
-      if (roomComponent?.appService?.globals) {
-        if (this.isValidGlobals(roomComponent.appService.globals)) {
-          
-          this.globals = roomComponent.appService.globals;
-          this.appService = roomComponent.appService;
-          this.roomComponent = roomComponent;
-          this.mediaSoupService = roomComponent.mediaSoupService;
-          
-          return true;
-        }
-      }
+      return true;
     }
     
     return false;
   }
-  
-  
-  findRoomComponent() {
-    if (this.roomComponent && this.mediaSoupService) return;
-    
-    const roomElement = document.getElementById(this.componentLocations.room.elementId);
-    if (roomElement?.__ngContext__) {
-      const roomComponent = roomElement.__ngContext__[this.componentLocations.room.contextIndex];
-      
-      if (roomComponent) {
-        this.roomComponent = roomComponent;
-        this.mediaSoupService = roomComponent.mediaSoupService;
-        
-      }
-    }
-  }
-  
-  
-  isValidGlobals(obj) {
-    if (!obj || typeof obj !== 'object') return false;
-    
-    
-    const required = ['audioVolume', 'sessData', 'preferences', 'videoDeviceID'];
-    const hasRequired = required.every(prop => obj.hasOwnProperty(prop));
-    
-    if (!hasRequired) return false;
-    
-    
-    if (typeof obj.audioVolume !== 'number' || obj.audioVolume < 0 || obj.audioVolume > 1) {
-      return false;
-    }
-    
-    return true;
-  }
-  
   
   debug() {
     return {
@@ -144,14 +66,11 @@ export class VTFGlobalsFinder {
         appService: !!this.appService,
         mediaSoupService: !!this.mediaSoupService,
         roomComponent: !!this.roomComponent
-      },
-      componentLocations: this.componentLocations
+      }
     };
   }
   
-  
   destroy() {
-    
     this.globals = null;
     this.appService = null;
     this.mediaSoupService = null;

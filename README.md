@@ -10,6 +10,69 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
 
 ---
 
+## Event & Message Contract (Schema v0.5.0)
+
+**Source of truth for all content/background integration.**
+
+_Last updated: clean-refactor-initial commit_
+
+### Event: audioChunk
+- **Sender:** Content Script
+- **Receiver:** Background Script
+- **Payload:**
+  ```js
+  {
+    type: 'audioChunk',
+    userId: string,           // VTF user ID (from msRemAudio-{userId})
+    chunk: Int16Array | number[], // Audio data, 16k PCM, 1 channel, 16384 samples
+    timestamp: number,        // ms since epoch, when chunk was sent
+    sampleRate: 16000         // Always 16000
+  }
+  ```
+- **Error/Edge Events:** (future)
+  - `audioChunkError` (optional, not yet implemented)
+
+### Event: getStatus
+- **Sender:** Content Script
+- **Receiver:** Background Script
+- **Payload:** `{ type: 'getStatus' }`
+- **Response:**
+  ```js
+  {
+    status: 'ok',
+    activeUsers: string[], // userIds with active buffers
+    stats: object          // module-specific debug info
+  }
+  ```
+
+### Event: startCapture / stopCapture
+- **Sender:** Content Script
+- **Receiver:** Background Script
+- **Payload:**
+  ```js
+  { type: 'startCapture' | 'stopCapture', userId: string }
+  ```
+
+### Event: audioElementAdded
+- **Sender:** DOM (MutationObserver)
+- **Receiver:** Content Script
+- **Payload:**
+  ```js
+  {
+    element: HTMLAudioElement,
+    userId: string
+  }
+  ```
+
+### Event: reconnectAudio / adjustVol
+- **Sender:** VTF Page (function hook or observer)
+- **Receiver:** Content Script
+- **Payload:** (none)
+
+---
+
+**All event/message boundaries are strictly enforced. If you change a contract, update this section and increment the schema version.**
+
 ## 🚀 Quickstart: Build & Load the Extension
 
 1. **Clone the repository:**

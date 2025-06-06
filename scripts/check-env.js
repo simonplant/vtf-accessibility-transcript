@@ -5,7 +5,7 @@ const major = parseInt(nodeVersion.split('.')[0].substring(1));
 
 if (major < 18) {
   console.error(`❌ Node.js 18+ required (you have ${nodeVersion})`);
-  console.error('   Please upgrade Node.js: https:
+  console.error('   Please upgrade Node.js: https://nodejs.org/en/download/');
   process.exit(1);
 }
 
