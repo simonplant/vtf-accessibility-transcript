@@ -656,110 +656,6 @@ class VTFAudioExtension {
       <div class="vtf-transcript-content"></div>
     `;
     
-    // Add styles
-    const style = document.createElement('style');
-    style.textContent = `
-      #vtf-transcription-display {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 400px;
-        max-height: 300px;
-        background: rgba(0, 0, 0, 0.9);
-        color: white;
-        border-radius: 8px;
-        font-family: -apple-system, sans-serif;
-        font-size: 14px;
-        overflow: hidden;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-      }
-      
-      .vtf-transcript-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 16px;
-        background: rgba(255, 255, 255, 0.1);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-      }
-      
-      .vtf-transcript-header h3 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 500;
-      }
-      
-      .vtf-transcript-close {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 24px;
-        cursor: pointer;
-        padding: 0;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      
-      .vtf-transcript-close:hover {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 4px;
-      }
-      
-      .vtf-transcript-content {
-        max-height: 250px;
-        overflow-y: auto;
-        padding: 12px;
-      }
-      
-      .vtf-transcript-entry {
-        margin-bottom: 12px;
-        padding: 8px 12px;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 4px;
-      }
-      
-      .vtf-transcript-entry:hover {
-        background: rgba(255, 255, 255, 0.08);
-      }
-      
-      .vtf-transcript-header {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 4px;
-        font-size: 12px;
-        opacity: 0.7;
-      }
-      
-      .vtf-transcript-speaker {
-        color: #4CAF50;
-        font-weight: 500;
-      }
-      
-      .vtf-transcript-text {
-        line-height: 1.4;
-      }
-      
-      .vtf-extension-notification {
-        animation: slideIn 0.3s ease;
-      }
-      
-      @keyframes slideIn {
-        from {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-    `;
-    
-    document.head.appendChild(style);
     document.body.appendChild(display);
     
     // Close button handler
@@ -773,38 +669,13 @@ class VTFAudioExtension {
    */
   notifyUser(message, type = 'info') {
     const notification = document.createElement('div');
-    notification.className = 'vtf-extension-notification';
+    notification.className = `vtf-extension-notification ${type}`;
     notification.textContent = message;
-    
-    const colors = {
-      info: 'rgba(33, 150, 243, 0.9)',
-      success: 'rgba(76, 175, 80, 0.9)',
-      warning: 'rgba(255, 152, 0, 0.9)',
-      error: 'rgba(244, 67, 54, 0.9)'
-    };
-    
-    notification.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: ${colors[type] || colors.info};
-      color: white;
-      padding: 12px 20px;
-      border-radius: 4px;
-      font-family: -apple-system, sans-serif;
-      font-size: 14px;
-      z-index: 10001;
-      cursor: pointer;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    `;
-    
-    notification.addEventListener('click', () => notification.remove());
     
     document.body.appendChild(notification);
     
     setTimeout(() => {
-      notification.style.opacity = '0';
-      notification.style.transition = 'opacity 0.3s ease';
+      notification.classList.add('fade-out');
       setTimeout(() => notification.remove(), 300);
     }, this.config.notificationDuration);
   }

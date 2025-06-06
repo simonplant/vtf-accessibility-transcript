@@ -805,24 +805,59 @@
     position: fixed;
     top: 20px;
     right: 20px;
+    min-width: 240px;
+    max-width: 90vw;
     background: var(--vtf-bg-secondary);
-    color: var(--vtf-text-primary);
-    padding: var(--space-md) var(--space-xl);
+    color: var(--vtf-text-light);
+    padding: 14px 24px;
     border-radius: var(--radius-md);
-    border: 1px solid var(--vtf-border);
-    box-shadow: var(--shadow-lg);
-    font-family: var(--vtf-font-family);
     font-size: var(--font-size-base);
-    z-index: 10000;
-    animation: slideIn var(--transition-base);
+    z-index: var(--z-toast);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    transition: opacity var(--transition-slow), transform var(--transition-slow);
+    opacity: 1;
+    animation: slideIn 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
   }
   
   .vtf-extension-notification.success {
-    border-left: 4px solid var(--vtf-success);
+    background: var(--vtf-success);
+    color: #fff;
   }
   
   .vtf-extension-notification.error {
-    border-left: 4px solid var(--vtf-danger);
+    background: var(--vtf-danger);
+    color: #fff;
+  }
+  
+  .vtf-extension-notification.info {
+    background: var(--vtf-primary);
+    color: #fff;
+  }
+  
+  .vtf-extension-notification.warning {
+    background: var(--vtf-accent);
+    color: #fff;
+  }
+  
+  .fade-out {
+    opacity: 0 !important;
+    transform: translateY(-20px);
+    transition: opacity var(--transition-slow), transform var(--transition-slow);
+  }
+  
+  @media (max-width: 600px) {
+    .vtf-extension-notification {
+      right: 10px;
+      left: 10px;
+      min-width: unset;
+      max-width: unset;
+      padding: 10px 12px;
+      font-size: var(--font-size-sm);
+    }
   }
   
   #vtf-transcription-display {
