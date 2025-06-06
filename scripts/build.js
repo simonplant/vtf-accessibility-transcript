@@ -72,6 +72,22 @@ async function copyIcons() {
   }
 }
 
+async function createPlaceholderIcons() {
+  // Create simple placeholder icons if none exist
+  const sizes = [16, 48, 128];
+  await fs.mkdir('dist/icons', { recursive: true });
+  
+  for (const size of sizes) {
+    // Create a simple colored square as placeholder
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">
+      <rect width="${size}" height="${size}" fill="#375a7f"/>
+      <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="${size/4}">VTF</text>
+    </svg>`;
+    
+    // For now, just note that icons are missing
+    log.warn(`Missing icon${size}.png - please add icon files to src/icons/`);
+  }
+}
 
 async function copyWorkers() {
   log.info('Copying workers...');
@@ -87,17 +103,26 @@ async function copyWorkers() {
 
 async function bundleContentScript() {
   log.info('Bundling content script with esbuild...');
+  
   try {
     await esbuild.build({
       entryPoints: ['src/content.js'],
-      outfile: 'dist/content-bundle.js',
       bundle: true,
+      outfile: 'dist/content-bundle.js',
       format: 'iife',
-      target: 'chrome102'
+      target: 'chrome102',
+      loader: {
+        '.js': 'js',
+      },
+      define: {
+        'process.env.NODE_ENV': '"production"'
+      }
     });
-    log.success('Bundled content script (dist/content-bundle.js)');
+    
+    log.success('Bundled content script');
   } catch (error) {
     log.error(`Failed to bundle content script: ${error.message}`);
+    throw error;
   }
 }
 
@@ -105,7 +130,7 @@ async function bundleBackground() {
   log.info('Bundling background script...');
   
   try {
-    // For now, just copy it since it likely doesn't have imports
+    // For now, just copy it since it doesn't have imports
     await fs.copyFile('src/background.js', 'dist/background.js');
     log.success('Copied background script');
   } catch (error) {
@@ -123,6 +148,32 @@ async function bundlePopupAndOptions() {
   } catch (error) {
     log.error(`Failed to copy scripts: ${error.message}`);
   }
+}
+
+async function validateBuild() {
+  log.info('Validating build...');
+  
+  const requiredFiles = [
+    'dist/manifest.json',
+    'dist/content-bundle.js',
+    'dist/background.js',
+    'dist/popup.html',
+    'dist/popup.js',
+    'dist/style.css'
+  ];
+  
+  let valid = true;
+  for (const file of requiredFiles) {
+    try {
+      await fs.access(file);
+      log.success(`Found ${file}`);
+    } catch {
+      log.error(`Missing required file: ${file}`);
+      valid = false;
+    }
+  }
+  
+  return valid;
 }
 
 async function createPackage() {
@@ -153,6 +204,11 @@ async function build() {
     await bundleContentScript();
     await bundleBackground();
     await bundlePopupAndOptions();
+    
+    const valid = await validateBuild();
+    if (!valid) {
+      throw new Error('Build validation failed');
+    }
     
     if (process.argv.includes('--package')) {
       await createPackage();
