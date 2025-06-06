@@ -33,6 +33,31 @@ export class VTFAudioCapture {
     
     this.isInitialized = false;
     this.volumeSyncInterval = null;
+    this.eventCallbacks = {
+      captureStarted: [],
+      captureStopped: [],
+      captureError: []
+    };
+  }
+  
+  
+  on(event, callback) {
+    if (this.eventCallbacks[event]) {
+      this.eventCallbacks[event].push(callback);
+    }
+  }
+  
+  
+  emit(event, ...args) {
+    if (this.eventCallbacks[event]) {
+      this.eventCallbacks[event].forEach(callback => {
+        try {
+          callback(...args);
+        } catch (error) {
+          console.error(`[Audio Capture] Error in ${event} callback:`, error);
+        }
+      });
+    }
   }
   
   
@@ -188,11 +213,13 @@ export class VTFAudioCapture {
       
       
       this.setupTrackMonitoring(track, userId);
+      this.emit('captureStarted', userId);
       
       
     } catch (error) {
       console.error(`[Audio Capture] Failed to capture ${userId}:`, error);
       this.stats.errors++;
+      this.emit('captureError', userId, error);
       throw error;
     }
   }
@@ -343,6 +370,7 @@ export class VTFAudioCapture {
     
     this.captures.delete(userId);
     this.stats.capturesStopped++;
+    this.emit('captureStopped', userId);
     
     return true;
   }

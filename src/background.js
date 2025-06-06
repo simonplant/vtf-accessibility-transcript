@@ -158,6 +158,12 @@ class VTFTranscriptionService {
           }
           return { updated: false, error: 'No settings provided' };
           
+        case 'forceTranscribe':
+          if (request.userId) {
+            await this.transcribeUserBuffer(request.userId);
+          }
+          return { status: 'transcribed' };
+          
         default:
           throw new Error(`Unknown message type: ${request.type}`);
       }
@@ -170,20 +176,36 @@ class VTFTranscriptionService {
   
   async handleAudioChunk(request) {
     const { userId, chunk, timestamp, sampleRate } = request;
+    
     if (!userId || !chunk || !Array.isArray(chunk)) {
-      console.error('[background] Invalid audioChunk payload', request);
+      console.error('[Service Worker] Invalid audioChunk payload', request);
       this.stats.errors++;
       return { error: 'Invalid payload' };
     }
-    if (!this.userBuffers.has(userId)) {
-      this.userBuffers.set(userId, { chunks: [], totalSamples: 0 });
-    }
-    const buf = this.userBuffers.get(userId);
-    buf.chunks.push({ chunk, timestamp });
-    buf.totalSamples += chunk.length;
+    
     this.stats.chunksReceived++;
-    console.log(`[background] Received chunk for user ${userId}, size: ${chunk.length}`);
-    return { status: 'ok' };
+    
+    // Get or create UserBufferManager instance (not plain object!)
+    if (!this.userBuffers.has(userId)) {
+      this.userBuffers.set(userId, new UserBufferManager(userId, this.config));
+    }
+    
+    const buffer = this.userBuffers.get(userId);
+    
+    // Convert Int16 back to Float32
+    const float32Data = this.int16ToFloat32(chunk);
+    
+    // Add to buffer
+    buffer.addChunk(float32Data, timestamp);
+    
+    // Check if ready to transcribe
+    if (buffer.isReadyToTranscribe()) {
+      this.transcribeUserBuffer(userId);
+    }
+    
+    console.log(`[Service Worker] Chunk for ${userId}: ${chunk.length} samples, buffer: ${buffer.getTotalSamples()} total`);
+    
+    return { received: true, bufferSize: buffer.getTotalSamples() };
   }
   
   
