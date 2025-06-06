@@ -30,62 +30,37 @@ export class VTFGlobalsFinder {
   }
   
   findGlobals() {
-    // Strategy 1: Check window.E_ (from console log)
-    if (window.E_ && typeof window.E_ === 'object' && window.E_.audioVolume !== undefined) {
+    // Direct check for window.E_ (from console logs)
+    if (window.E_) {
+      console.log('Globals: E_');  // Match the prototype's logging
       this.globals = window.E_;
-      console.log('[VTF Globals] Found at window.E_');
+      
+      // Look for MediaSoupService and appService if available
+      this.findServices();
       return true;
     }
     
-    // Strategy 2: Search all single/double letter window properties
-    const windowKeys = Object.keys(window);
-    for (const key of windowKeys) {
-      if (key.length <= 2 && window[key] && typeof window[key] === 'object') {
-        if (window[key].audioVolume !== undefined || 
-            window[key].sessData !== undefined ||
-            window[key].preferences !== undefined) {
-          this.globals = window[key];
-          console.log(`[VTF Globals] Found at window.${key}`);
-          return true;
-        }
-      }
-    }
-    
-    // Strategy 3: Check Angular contexts (previous approach)
-    const topRoom = document.getElementById('topRoomDiv');
-    if (topRoom && topRoom.__ngContext__) {
-      for (let i = 0; i < topRoom.__ngContext__.length; i++) {
-        const ctx = topRoom.__ngContext__[i];
-        if (ctx && typeof ctx === 'object') {
-          // Check for globals directly
-          if (ctx.globals && ctx.globals.audioVolume !== undefined) {
-            this.globals = ctx.globals;
-            console.log(`[VTF Globals] Found at topRoomDiv.__ngContext__[${i}].globals`);
+    // Fallback: scan for objects with expected VTF properties
+    const expectedProps = ['audioVolume', 'sessData', 'preferences'];
+    for (const key in window) {
+      if (key.length <= 3 && window[key] && typeof window[key] === 'object') {
+        try {
+          // Check if this object has VTF-like properties
+          let matchCount = 0;
+          for (const prop of expectedProps) {
+            if (window[key].hasOwnProperty(prop)) {
+              matchCount++;
+            }
+          }
+          
+          if (matchCount >= 2) {  // At least 2 of the expected properties
+            console.log(`[VTF Globals] Found at window.${key} via property scan`);
+            this.globals = window[key];
+            this.findServices();
             return true;
           }
-          // Check for appService.globals
-          if (ctx.appService?.globals?.audioVolume !== undefined) {
-            this.globals = ctx.appService.globals;
-            this.appService = ctx.appService;
-            console.log(`[VTF Globals] Found at topRoomDiv.__ngContext__[${i}].appService.globals`);
-            return true;
-          }
-        }
-      }
-    }
-    
-    // Strategy 4: Search for MediaSoupService
-    for (const key of windowKeys) {
-      if (window[key] && typeof window[key] === 'object') {
-        if (window[key].startListeningToPresenter && 
-            typeof window[key].startListeningToPresenter === 'function') {
-          this.mediaSoupService = window[key];
-          console.log(`[VTF Globals] Found MediaSoupService at window.${key}`);
-          // Try to find globals through service
-          if (window[key].globals) {
-            this.globals = window[key].globals;
-            return true;
-          }
+        } catch (e) {
+          // Ignore errors from accessing protected properties
         }
       }
     }
@@ -93,23 +68,50 @@ export class VTFGlobalsFinder {
     return false;
   }
   
-  debug() {
-    const topRoom = document.getElementById('topRoomDiv');
+  findServices() {
+    // Look for MediaSoupService (might be at various locations)
+    const servicePaths = [
+      'mediaSoupService',
+      'appService.mediaSoupService',
+      'appService.mediaHandlerService.mediaSoupService'
+    ];
     
+    for (const path of servicePaths) {
+      const service = this.getNestedProperty(this.globals, path);
+      if (service && typeof service.startListeningToPresenter === 'function') {
+        this.mediaSoupService = service;
+        console.log(`[VTF Globals] Found MediaSoupService at globals.${path}`);
+        break;
+      }
+    }
+    
+    // Look for appService
+    if (this.globals.appService) {
+      this.appService = this.globals.appService;
+      console.log('[VTF Globals] Found appService');
+    }
+  }
+  
+  getNestedProperty(obj, path) {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
+  }
+  
+  debug() {
     return {
       found: !!this.globals,
       attempts: this.attempts,
-      windowE_: !!window.E_,
-      windowE_hasVolume: window.E_?.audioVolume !== undefined,
-      elements: {
-        topRoomDiv: !!topRoom,
-        topRoomContext: topRoom ? !!topRoom.__ngContext__ : false
-      },
+      globalsLocation: this.globals === window.E_ ? 'window.E_' : 'other',
       globals: this.globals ? {
         hasAudioVolume: this.globals.audioVolume !== undefined,
         audioVolume: this.globals.audioVolume,
-        properties: Object.keys(this.globals).slice(0, 10) // First 10 properties
-      } : null
+        hasSessData: !!this.globals.sessData,
+        hasPreferences: !!this.globals.preferences,
+        properties: Object.keys(this.globals).slice(0, 10)
+      } : null,
+      services: {
+        hasMediaSoup: !!this.mediaSoupService,
+        hasAppService: !!this.appService
+      }
     };
   }
   
@@ -119,3 +121,5 @@ export class VTFGlobalsFinder {
     this.mediaSoupService = null;
   }
 }
+
+export default VTFGlobalsFinder;
