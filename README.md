@@ -32,7 +32,7 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
 - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
 - Access to VTF (vtf.t3live.com)
 
-### Install from Source
+### Install from Source (Recommended for Most Users)
 
 1. **Clone the repository:**
    ```bash
@@ -52,9 +52,28 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
    - Enter your OpenAI API key
    - Click "Save API Settings"
 
-## 🎮 Usage
+#### Troubleshooting Installation
+- If the extension does not appear, ensure you selected the `src` folder, not the project root.
+- If you see errors about permissions, refresh the extensions page and try again.
+- For issues with the API key, double-check that it starts with `sk-` and has the correct permissions.
+- If you see "Manifest not found" errors, ensure you are using Chrome 102+ and have selected the correct folder.
 
-### Basic Operation
+### Development Setup (for Contributors)
+
+1. **Install dependencies (optional, for build tools):**
+   ```bash
+   npm install
+   ```
+2. **Run tests:**
+   ```bash
+   npm test
+   ```
+3. **Build for production (coming soon):**
+   ```bash
+   npm run build
+   ```
+
+## 🎮 Usage
 
 1. **Navigate to VTF**: Go to [vtf.t3live.com](https://vtf.t3live.com)
 2. **Start Capture**: Click the extension icon and press "Start Capture"
@@ -64,25 +83,21 @@ Real-time audio transcription for Virtual Trading Floor using OpenAI's Whisper A
 ### Features Guide
 
 #### Speaker Identification
-The extension automatically identifies speakers and allows custom naming:
 - Go to **Options → Speaker Identification**
 - Add custom mappings for user IDs
 - Import/export speaker configurations
 - Enable Auto-Learn to automatically save new speakers
 
 #### Auto-Start
-Enable automatic capture when visiting VTF:
 - **Options → Capture Settings → Auto-start capture**
 
 #### Buffer Configuration
-Fine-tune transcription timing:
 - **Options → Capture Settings → Buffer Duration**
   - Lower (0.5s) = Faster transcription, more API calls
   - Higher (5s) = Better context, fewer API calls
   - Default: 1.5s (recommended)
 
 #### Silence Detection
-Adjust sensitivity for speech detection:
 - **Options → Capture Settings → Silence Detection Sensitivity**
   - High: Captures quiet speech
   - Low: Filters out background noise
@@ -145,24 +160,8 @@ vtf-audio-extension/
 │       └── audio-worklet.js  # Audio processing worker
 ├── test/                  # Test files
 ├── docs/                  # Documentation
-│   ├── design/           # Architecture documents
-│   └── legacy/           # Migration guides
+│   └── design/           # Architecture documents
 └── README.md             # This file
-```
-
-### Building from Source
-
-Currently, the extension runs directly from source. For production builds:
-
-```bash
-# Install dependencies (optional - for build tools)
-npm install
-
-# Run tests
-npm test
-
-# Build for production (coming soon)
-npm run build
 ```
 
 ### Testing
@@ -261,37 +260,6 @@ window.vtfExtension.debug()
 | Memory per Speaker | 5MB | 10MB |
 | Network Usage | 100KB/min | 200KB/min |
 
-## 🔄 Migration from v1.x
-
-### Upgrading Steps
-
-1. **Export your data** (if using v1.x):
-   - Use old extension's export feature
-   - Save the JSON file
-
-2. **Remove old extension**:
-   - Go to `chrome://extensions`
-   - Remove VTF Audio Extension v1.x
-
-3. **Install v0.5.0**:
-   - Follow installation steps above
-
-4. **Import your data**:
-   - Options → Data Management → Import Data
-   - Select your exported JSON file
-
-### Breaking Changes
-- New message format (legacy support included)
-- Different storage structure (automatic migration)
-- Completely redesigned UI
-- No more inject.js (integrated into content.js)
-
-### What's Preserved
-- API keys (migrated automatically)
-- Speaker mappings
-- Capture settings
-- Transcription history (if exported/imported)
-
 ## 🤝 Contributing
 
 ### Development Setup
@@ -342,20 +310,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **Issues**: [GitHub Issues](https://github.com/simonplant/vtf-audio-extension/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/simonplant/vtf-audio-extension/discussions)
 - **Wiki**: [Project Wiki](https://github.com/simonplant/vtf-audio-extension/wiki)
-
-## 🚀 Roadmap
-
-### Version 2.1 (Planned)
-- [ ] Local Whisper model support
-- [ ] Real-time transcription display overlay
-- [ ] Keyboard shortcuts
-- [ ] Export to various formats (SRT, VTT, TXT)
-
-### Version 2.2 (Future)
-- [ ] Multi-language support
-- [ ] Custom vocabulary/terminology
-- [ ] Speaker diarization improvements
-- [ ] Integration with note-taking apps
 
 ---
 
