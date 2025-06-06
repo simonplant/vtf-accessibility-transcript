@@ -1,11 +1,27 @@
-const fs = require('fs');
+#!/usr/bin/env node
+
+const fs = require('fs').promises;
 const path = require('path');
 
-const distPath = path.join(__dirname, '..', 'dist');
+async function clean() {
+  console.log('🧹 Cleaning build artifacts...\n');
+  
+  const toClean = [
+    'dist',
+    'vtf-audio-extension.zip',
+    'node_modules/.cache'
+  ];
+  
+  for (const item of toClean) {
+    try {
+      await fs.rm(item, { recursive: true, force: true });
+      console.log(`  ✓ Removed ${item}`);
+    } catch (error) {
+      // Ignore if doesn't exist
+    }
+  }
+  
+  console.log('\n✨ Clean complete');
+}
 
-if (fs.existsSync(distPath)) {
-  fs.rmSync(distPath, { recursive: true, force: true });
-  console.log('Cleaned dist directory.');
-} else {
-  console.log('No dist directory to clean.');
-} 
+clean();
