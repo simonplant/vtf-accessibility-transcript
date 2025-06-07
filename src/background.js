@@ -1,5 +1,7 @@
 // VTF Audio Extension - Service Worker\n// Handles audio buffering, transcription, and message coordination\n
 
+import { CircuitBreaker } from './modules/circuit-breaker.js';
+
 class VTFTranscriptionService {
   constructor() {
     
@@ -53,8 +55,48 @@ class VTFTranscriptionService {
     this.maxCallsPerMinute = 50; // Whisper API limit
     this.minTimeBetweenCalls = 1200; // 1.2 seconds minimum between calls
     this.lastApiCallTime = 0;
+    
+    // Initialize circuit breaker for API calls
+    this.circuitBreaker = new CircuitBreaker({
+      failureThreshold: 3,
+      resetTimeout: 30000, // 30 seconds
+      failureRateThreshold: 0.5
+    });
+    
+    this.setupCircuitBreaker();
   }
   
+  setupCircuitBreaker() {
+    this.circuitBreaker.onStateChange = (state, info) => {
+      console.log(`[Service Worker] Circuit breaker state changed to ${state}`, info);
+      
+      // Notify popup about circuit state
+      this.broadcastCircuitState(state, info);
+    };
+    
+    this.circuitBreaker.onFailure = (error, failureCount) => {
+      console.error(`[Service Worker] API failure #${failureCount}:`, error);
+      
+      // Store error for debugging
+      this.stats.lastApiError = {
+        message: error.message,
+        timestamp: Date.now(),
+        failureCount
+      };
+    };
+  }
+  
+  broadcastCircuitState(state, info) {
+    chrome.tabs.query({ url: '<all_urls>' }, (tabs) => {
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { 
+          type: 'circuitBreakerState',
+          state,
+          info
+        });
+      }
+    });
+  }
   
   async init() {
     
@@ -274,57 +316,86 @@ class VTFTranscriptionService {
     // Rate limiting check
     await this.enforceRateLimit();
     
+    // Create WAV blob
     const wavBlob = this.createWAV(audioData.samples, 16000);
     
-    
+    // Prepare form data
     const formData = new FormData();
     formData.append('file', wavBlob, 'audio.wav');
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');
     formData.append('response_format', 'json');
     
-    
+    // Add speaker context
     const speaker = this.getSpeakerName(userId);
     formData.append('prompt', `Speaker: ${speaker}. Virtual Trading Floor audio.`);
     
-    
-    
-    const response = await fetch(this.whisperEndpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: formData
-    });
-    
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Whisper API error: ${response.status} - ${error}`);
+    // Execute API call with circuit breaker protection
+    try {
+      const result = await this.circuitBreaker.execute(async () => {
+        const response = await fetch(this.whisperEndpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: formData
+        });
+        
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(`Whisper API error: ${response.status} - ${error}`);
+        }
+        
+        return await response.json();
+      });
+      
+      // Process successful result
+      if (result && result.text && result.text.trim()) {
+        const transcription = {
+          userId,
+          text: result.text.trim(),
+          speaker: speaker,
+          timestamp: audioData.startTime,
+          duration: audioData.duration
+        };
+        
+        this.stats.transcriptionsSent++;
+        this.stats.totalDuration += transcription.duration;
+        
+        await this.storeTranscription(transcription);
+        this.broadcastTranscription(transcription);
+      }
+    } catch (error) {
+      // Check if circuit breaker is open
+      if (this.circuitBreaker.state === 'OPEN') {
+        console.warn(`[Service Worker] Circuit breaker OPEN for ${userId}, skipping transcription`);
+        // Store audio for later retry
+        this.storeFailedAudio(userId, audioData);
+      } else {
+        // Re-throw for normal error handling
+        throw error;
+      }
     }
+  }
+  
+  /**
+   * Store failed audio for later retry
+   * @param {string} userId - User ID
+   * @param {Object} audioData - Audio data that failed to transcribe
+   */
+  storeFailedAudio(userId, audioData) {
+    // Store in IndexedDB or chrome.storage for persistence
+    const failedItem = {
+      userId,
+      audioData,
+      timestamp: Date.now(),
+      retryCount: 0
+    };
     
-    const result = await response.json();
+    // For now, just log it
+    console.log(`[Service Worker] Storing failed audio for ${userId}, duration: ${audioData.duration}s`);
     
-    if (result.text && result.text.trim()) {
-      const transcription = {
-        userId,
-        text: result.text.trim(),
-        speaker: speaker,
-        timestamp: audioData.startTime,
-        duration: audioData.duration
-      };
-      
-      this.stats.transcriptionsSent++;
-      this.stats.totalDuration += transcription.duration;
-      
-      
-      
-      await this.storeTranscription(transcription);
-      
-      
-      this.broadcastTranscription(transcription);
-    } else {
-      
-    }
+    // TODO: Implement persistent storage for retry
   }
   
   async enforceRateLimit() {
@@ -661,6 +732,9 @@ class VTFTranscriptionService {
       isActive: this.activeTranscriptions.has(userId)
     }));
     
+    // Get circuit breaker state
+    const circuitBreakerState = this.circuitBreaker.getState();
+    
     return {
       hasApiKey: !!this.apiKey,
       isCapturing: !!this.stats.captureStartTime,
@@ -679,7 +753,14 @@ class VTFTranscriptionService {
         speaker: this.getSpeakerName(userId),
         error: error.message,
         retries: this.retryCount.get(userId) || 0
-      }))
+      })),
+      circuitBreaker: {
+        state: circuitBreakerState.state,
+        isHealthy: circuitBreakerState.state === 'CLOSED',
+        failureRate: (circuitBreakerState.failureRate * 100).toFixed(1) + '%',
+        failures: circuitBreakerState.failures,
+        timeUntilReset: circuitBreakerState.timeUntilReset
+      }
     };
   }
   

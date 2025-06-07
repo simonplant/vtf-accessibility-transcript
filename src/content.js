@@ -17,6 +17,93 @@ class VTFExtensionBridge {
     
     this.messageQueue = [];
     this.initPromise = null;
+    
+    // Simple reconnection state
+    this.reconnectionState = {
+      isReconnecting: false,
+      attempts: 0,
+      maxAttempts: 10,
+      previousCaptures: []
+    };
+  }
+  
+  // Simple reconnection handling
+  handleDisconnect(activeCaptures = []) {
+    console.log('[VTF Extension] Handling disconnect');
+    
+    this.reconnectionState.isReconnecting = true;
+    this.reconnectionState.previousCaptures = activeCaptures;
+    this.reconnectionState.attempts = 0;
+    
+    // Notify background
+    this.sendToBackground({
+      type: 'disconnected',
+      previousCaptures: activeCaptures
+    });
+    
+    // Start reconnection attempts
+    this.attemptReconnection();
+  }
+  
+  async attemptReconnection() {
+    if (this.reconnectionState.attempts >= this.reconnectionState.maxAttempts) {
+      console.error('[VTF Extension] Max reconnection attempts reached');
+      this.reconnectionState.isReconnecting = false;
+      return;
+    }
+    
+    this.reconnectionState.attempts++;
+    console.log(`[VTF Extension] Reconnection attempt ${this.reconnectionState.attempts}`);
+    
+    // Check if inject script is responsive
+    const connected = await this.checkConnection();
+    
+    if (connected) {
+      console.log('[VTF Extension] Reconnected successfully');
+      this.reconnectionState.isReconnecting = false;
+      
+      // Notify background
+      this.sendToBackground({
+        type: 'reconnected',
+        attempts: this.reconnectionState.attempts,
+        previousCaptures: this.reconnectionState.previousCaptures
+      });
+      
+      // Re-initialize if needed
+      if (!this.state.initialized) {
+        await this.init();
+      }
+    } else {
+      // Retry with exponential backoff
+      const delay = Math.min(1000 * Math.pow(2, this.reconnectionState.attempts - 1), 10000);
+      setTimeout(() => this.attemptReconnection(), delay);
+    }
+  }
+  
+  async checkConnection() {
+    return new Promise((resolve) => {
+      const testId = `test-${Date.now()}`;
+      let responded = false;
+      
+      const handleResponse = (event) => {
+        if (event.data.source === 'vtf-inject' && 
+            event.data.type === 'connectionTest' &&
+            event.data.data?.testId === testId) {
+          responded = true;
+          window.removeEventListener('message', handleResponse);
+          resolve(true);
+        }
+      };
+      
+      window.addEventListener('message', handleResponse);
+      this.sendToInject('connectionTest', { testId });
+      
+      // Timeout after 2 seconds
+      setTimeout(() => {
+        window.removeEventListener('message', handleResponse);
+        if (!responded) resolve(false);
+      }, 2000);
+    });
   }
   
   async init() {
@@ -167,6 +254,11 @@ class VTFExtensionBridge {
             // Response to getState command
             this.handleStateResponse(event.data.data);
             break;
+            
+          case 'connectionTest':
+            // Respond to connection test from reconnection handler
+            this.sendToInject('connectionTestResponse', { testId: event.data.data.testId });
+            break;
         }
       } catch (error) {
         console.error('[VTF Extension] Message handler error:', error);
@@ -219,24 +311,30 @@ class VTFExtensionBridge {
   }
   
   handleVTFFunction(data) {
-    switch (data.function) {
-      case 'reconnectAudio':
-        console.log('[VTF Extension] Reconnect audio triggered');
-        this.sendToBackground({ 
-          type: 'reconnectAudio',
-          timestamp: data.timestamp 
-        });
-        break;
-        
-      case 'adjustVol':
-        console.log('[VTF Extension] Volume changed:', data.volume);
-        this.sendToBackground({
-          type: 'volumeChanged',
-          volume: data.volume,
-          timestamp: data.timestamp
-        });
-        break;
+    console.log('[VTF Extension] VTF function called:', data.function);
+    
+    // Handle reconnectAudio specifically
+    if (data.function === 'reconnectAudio') {
+      console.log('[VTF Extension] Audio reconnection detected');
+      
+      // Get current active captures before disconnect
+      this.sendToInject('getActiveCaptures');
+      
+      // Wait a bit for response then trigger reconnection
+      setTimeout(() => {
+        const captureState = {
+          activeCaptures: this.lastInjectState?.activeCaptures || []
+        };
+        this.handleDisconnect(captureState.activeCaptures);
+      }, 100);
     }
+    
+    // Forward to background for logging
+    this.sendToBackground({
+      type: 'vtfFunction',
+      function: data.function,
+      timestamp: data.timestamp
+    });
   }
   
   handleError(context, error) {

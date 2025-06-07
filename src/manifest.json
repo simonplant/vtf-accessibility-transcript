@@ -46,7 +46,14 @@
     "options_page": "options.html",
     
     "web_accessible_resources": [{
-      "resources": ["inject/inject.js", "workers/audio-worklet.js"],
+      "resources": [
+        "inject/inject.js", 
+        "workers/audio-worklet.js",
+        "modules/reconnection-handler.js",
+        "modules/audio-quality-monitor.js",
+        "modules/circuit-breaker.js",
+        "modules/adaptive-buffer.js"
+      ],
       "matches": ["*://vtf.t3live.com/*"]
     }]
   }

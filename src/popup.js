@@ -60,6 +60,7 @@ class VTFPopup {
       
       extensionStatus: document.getElementById('extensionStatus'),
       apiKeyStatus: document.getElementById('apiKeyStatus'),
+      apiHealthStatus: document.getElementById('apiHealthStatus'),
       activeUsers: document.getElementById('activeUsers'),
       transcriptionCount: document.getElementById('transcriptionCount'),
       
@@ -170,6 +171,26 @@ class VTFPopup {
       this.elements.startBtn.disabled = true;
     }
     
+    if (status.circuitBreaker) {
+      const cb = status.circuitBreaker;
+      if (cb.state === 'CLOSED') {
+        this.elements.apiHealthStatus.textContent = 'Healthy';
+        this.elements.apiHealthStatus.className = 'status-value success';
+      } else if (cb.state === 'OPEN') {
+        const resetIn = cb.timeUntilReset ? 
+          ` (reset in ${Math.ceil(cb.timeUntilReset / 1000)}s)` : '';
+        this.elements.apiHealthStatus.textContent = `Unavailable${resetIn}`;
+        this.elements.apiHealthStatus.className = 'status-value danger';
+      } else if (cb.state === 'HALF_OPEN') {
+        this.elements.apiHealthStatus.textContent = 'Testing...';
+        this.elements.apiHealthStatus.className = 'status-value warning';
+      }
+      
+      if (cb.failures > 0) {
+        this.elements.apiHealthStatus.title = 
+          `Failures: ${cb.failures}, Rate: ${cb.failureRate}`;
+      }
+    }
     
     if (status.stats) {
       this.elements.transcriptionCount.textContent = status.stats.transcriptionsSent || '0';

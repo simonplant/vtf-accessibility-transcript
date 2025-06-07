@@ -6,6 +6,7 @@
  */
 import { VTFAudioWorkletNode } from './vtf-audio-worklet-node.js';
 import { AudioDataTransfer } from './audio-data-transfer.js';
+import { AudioQualityMonitor } from './audio-quality-monitor.js';
 
 export class VTFAudioCapture {
   constructor(options = {}) {
@@ -16,6 +17,7 @@ export class VTFAudioCapture {
       latencyHint: 'interactive',
       maxCaptures: 50,
       workletPath: 'audio-worklet.js',
+      enableQualityMonitoring: true,
       ...options
     };
     this.audioContext = null;
@@ -27,13 +29,22 @@ export class VTFAudioCapture {
       this.dataTransfer = null;
       console.warn('[Audio Capture] AudioDataTransfer is not available or stubbed. Audio transfer will be disabled.');
     }
+    
+    // Initialize audio quality monitor
+    this.qualityMonitor = this.config.enableQualityMonitoring 
+      ? new AudioQualityMonitor({
+          silenceThreshold: this.config.silenceThreshold
+        })
+      : null;
+    
     this.globalsFinder = null;
     this.stats = {
       capturesStarted: 0,
       capturesStopped: 0,
       workletUsed: 0,
       fallbackUsed: 0,
-      errors: 0
+      errors: 0,
+      audioQualityIssues: 0
     };
     this.isInitialized = false;
     this.volumeSyncInterval = null;
@@ -260,11 +271,42 @@ export class VTFAudioCapture {
     if (!capture) {
       return;
     }
+    
     capture.sampleCount += data.samples.length;
     capture.chunkCount++;
+    
+    // Audio quality monitoring
+    if (this.qualityMonitor && data.samples) {
+      const quality = this.qualityMonitor.analyze(new Float32Array(data.samples));
+      
+      // Log quality issues
+      if (quality.quality !== 'good') {
+        this.stats.audioQualityIssues++;
+        console.warn(`[Audio Capture] Quality issue for ${userId}:`, quality.issues);
+        
+        // Emit quality warning event
+        this.emit('audioQualityWarning', {
+          userId,
+          quality: quality.quality,
+          issues: quality.issues,
+          metrics: {
+            snr: quality.snr,
+            clipping: quality.clipping.ratio,
+            silence: quality.silence.ratio
+          }
+        });
+      }
+      
+      // Skip sending if audio is completely silent
+      if (quality.quality === 'silent') {
+        return;
+      }
+    }
+    
     if (this.dataTransfer) {
       this.dataTransfer.sendAudioData(userId, data.samples);
     }
+    
     if (capture.chunkCount % 10 === 0) {
       const duration = (Date.now() - capture.startTime) / 1000;
       const avgChunkRate = capture.chunkCount / duration;
@@ -403,6 +445,12 @@ export class VTFAudioCapture {
     const captureStats = Array.from(this.captures.keys()).map(userId =>
       this.getCaptureStats(userId)
     );
+    
+    // Get quality monitor stats if available
+    const qualityStats = this.qualityMonitor 
+      ? this.qualityMonitor.getStats()
+      : null;
+    
     return {
       ...this.stats,
       contextState: this.audioContext?.state || 'not-created',
@@ -410,7 +458,8 @@ export class VTFAudioCapture {
       workletReady: this.workletReady,
       activeCaptures: this.captures.size,
       captures: captureStats,
-      currentVolume: this.getVTFVolume()
+      currentVolume: this.getVTFVolume(),
+      audioQuality: qualityStats
     };
   }
 

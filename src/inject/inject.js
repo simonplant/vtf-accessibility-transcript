@@ -406,7 +406,7 @@
   };
   
   // Command Handler
-  const handleCommand = (command) => {
+  const handleCommand = (command, data) => {
     console.log('[VTF Inject] Received command:', command);
     
     switch (command) {
@@ -420,6 +420,12 @@
           activeCaptures: Array.from(audioCaptures.keys()),
           captureErrors: captureErrors,
           errors: state.errors
+        });
+        break;
+        
+      case 'getActiveCaptures':
+        sendMessage('activeCaptures', {
+          activeCaptures: Array.from(audioCaptures.keys())
         });
         break;
         
@@ -440,6 +446,41 @@
           hookVTFFunctions();
         }
         sendMessage('stateRefreshed', { globalsFound: found });
+        break;
+        
+      case 'connectionTest':
+        // Respond immediately to connection test
+        sendMessage('connectionTest', { 
+          testId: data?.testId,
+          connected: true,
+          initialized: state.initialized 
+        });
+        break;
+        
+      case 'connectionTestResponse':
+        // Handle connection test response
+        sendMessage('connectionTest', { 
+          testId: data?.testId,
+          connected: true 
+        });
+        break;
+        
+      case 'resumeCapture':
+        // Resume capture for a specific user
+        if (data?.userId) {
+          const element = document.getElementById(`msRemAudio-${data.userId}`);
+          if (element && element.srcObject && !audioCaptures.has(data.userId)) {
+            captureAudioElement(element);
+            sendMessage('captureResumed', { userId: data.userId });
+          } else {
+            sendMessage('captureResumeFailed', { 
+              userId: data.userId,
+              reason: !element ? 'Element not found' : 
+                      !element.srcObject ? 'No stream' : 
+                      'Already capturing'
+            });
+          }
+        }
         break;
     }
   };
@@ -506,7 +547,7 @@
     if (event.data.source !== 'vtf-content') return;
     
     try {
-      handleCommand(event.data.type);
+      handleCommand(event.data.type, event.data);
     } catch (error) {
       console.error('[VTF Inject] Command handler error:', error);
       sendMessage('error', {
