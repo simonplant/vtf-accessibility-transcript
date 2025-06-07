@@ -22,8 +22,7 @@
     "content_scripts": [{
       "matches": ["*://vtf.t3live.com/*"],
       "js": ["content.js"],
-      "run_at": "document_idle",
-      "all_frames": false
+      "run_at": "document_idle"
     }],
     
     "permissions": [
@@ -47,10 +46,7 @@
     "options_page": "options.html",
     
     "web_accessible_resources": [{
-      "resources": [
-        "workers/audio-worklet.js",
-        "modules/*.js"
-      ],
+      "resources": ["inject/audio-hook.js"],
       "matches": ["*://vtf.t3live.com/*"]
     }]
   }

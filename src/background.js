@@ -767,21 +767,29 @@ self.addEventListener('install', event => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  
-  if (!vtfService) {
-    vtfService = new VTFTranscriptionService();
-    vtfService.init();
+  switch (request.type) {
+    case 'audioChunk':
+      // Process audio data from page
+      if (!vtfService) {
+        vtfService = new VTFTranscriptionService();
+        vtfService.init();
+      }
+      vtfService.handleAudioChunk({
+        userId: request.userId,
+        chunk: request.chunk,
+        timestamp: request.timestamp,
+        sampleRate: request.sampleRate
+      });
+      break;
+    case 'userJoined':
+    case 'userLeft':
+    case 'captureStarted':
+    case 'captureStopped':
+      // Handle state changes (no-op for now)
+      break;
   }
-  
-  
-  vtfService.handleMessage(request, sender)
-    .then(response => sendResponse(response))
-    .catch(error => {
-      console.error('[Service Worker] Message handling error:', error);
-      sendResponse({ error: error.message });
-    });
-    
-  return true; 
+  sendResponse({ received: true });
+  return true;
 });
 
 self.addEventListener('message', event => {
