@@ -46,7 +46,7 @@
     "options_page": "options.html",
     
     "web_accessible_resources": [{
-      "resources": ["inject/inject.js"],
+      "resources": ["inject/inject.js", "workers/audio-worklet.js"],
       "matches": ["*://vtf.t3live.com/*"]
     }]
   }

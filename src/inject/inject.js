@@ -168,6 +168,17 @@
   const audioCaptures = new Map();
   let captureErrors = 0;
   
+  // Singleton AudioContext manager
+  class AudioContextManager {
+    static instance = null;
+    static getContext() {
+      if (!this.instance) {
+        this.instance = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      }
+      return this.instance;
+    }
+  }
+  
   const captureAudioElement = (element) => {
     const userId = element.id.replace('msRemAudio-', '');
     
@@ -189,11 +200,8 @@
         throw new Error('No audio tracks in stream');
       }
       
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: 16000,
-        latencyHint: 'interactive'
-      });
-      
+      // Use singleton AudioContext
+      const audioContext = AudioContextManager.getContext();
       const source = audioContext.createMediaStreamSource(stream);
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
       

@@ -1,11 +1,11 @@
 {
     "name": "vtf-audio-extension",
-    "version": "0.5.0",
+    "version": "0.5npm.0",
     "description": "VTF Audio Transcription Chrome Extension",
     "private": true,
     "scripts": {
         "clean": "rm -rf dist",
-        "copy:static": "mkdir -p dist/inject dist/icons dist/workers && cp src/inject/inject.js dist/inject/ && cp -r src/icons/* dist/icons/ && cp src/manifest.json dist/ && cp src/workers/audio-worklet.js dist/workers/",
+        "copy:static": "mkdir -p dist && cp -r src/inject dist/ && cp -r src/icons dist/ && cp -r src/workers dist/ && cp src/manifest.json dist/ && cp src/options.html dist/ && cp src/options.js dist/ && cp src/popup.html dist/ && cp src/popup.js dist/ && cp src/style.css dist/",
         "build:content": "esbuild src/content.js --bundle --outfile=dist/content.js --format=iife",
         "build:background": "esbuild src/background.js --bundle --outfile=dist/background.js --format=iife",
         "build": "npm run clean && npm run copy:static && npm run build:content && npm run build:background",
