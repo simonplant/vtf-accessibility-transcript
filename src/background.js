@@ -5,9 +5,16 @@ import { CircuitBreaker } from './modules/circuit-breaker.js';
 class VTFTranscriptionService {
   constructor() {
     
+    // Speaker-aware buffers (matches working prototype)
+    this.speakerBuffers = new Map(); // streamId -> { buffer, lastActivityTime, pendingTranscripts }
     this.userBuffers = new Map();          
     this.activeTranscriptions = new Map(); 
     this.transcriptionQueue = new Map();
+    
+    // Activity tracking for adaptive buffering
+    this.activityLevel = 'idle';
+    this.lastActivityCheck = Date.now();
+    this.recentActivities = [];
     
     
     this.retryCount = new Map();           
@@ -22,7 +29,10 @@ class VTFTranscriptionService {
       initialBackoff: 1000,
       maxBackoff: 30000,
       maxTranscriptionHistory: 1000,    
-      keepAliveInterval: 20000           
+      keepAliveInterval: 20000,
+      // Adaptive chunk durations (matches working prototype)
+      CHUNK_DURATION_ACTIVE: 1.5,
+      CHUNK_DURATION_IDLE: 5.0
     };
     
     
@@ -64,6 +74,9 @@ class VTFTranscriptionService {
     });
     
     this.setupCircuitBreaker();
+    
+    // Start activity monitoring
+    this.startActivityMonitoring();
   }
   
   setupCircuitBreaker() {
@@ -84,6 +97,46 @@ class VTFTranscriptionService {
         failureCount
       };
     };
+  }
+  
+  // Activity monitoring for adaptive buffering (matches working prototype)
+  startActivityMonitoring() {
+    setInterval(() => {
+      this.updateActivityLevel();
+    }, 1000);
+  }
+  
+  updateActivityLevel() {
+    const now = Date.now();
+    // Remove activities older than 10 seconds
+    this.recentActivities = this.recentActivities.filter(t => now - t < 10000);
+    
+    const activityCount = this.recentActivities.length;
+    if (activityCount > 20) {
+      this.activityLevel = 'high';
+    } else if (activityCount > 5) {
+      this.activityLevel = 'medium';
+    } else {
+      this.activityLevel = 'low';
+    }
+  }
+  
+  getActivityLevel() {
+    return this.activityLevel;
+  }
+  
+  // Adaptive chunk duration based on activity level (matches working prototype)
+  getAdaptiveChunkDuration() {
+    const activityLevel = this.getActivityLevel();
+    switch (activityLevel) {
+      case 'high':
+        return 1.5; // Active conversation
+      case 'medium':
+        return 3.0; // Moderate activity
+      case 'low':
+      default:
+        return 5.0; // Idle/quiet
+    }
   }
   
   broadcastCircuitState(state, info) {
@@ -224,9 +277,10 @@ class VTFTranscriptionService {
   
   
   async handleAudioChunk(request) {
-    const { userId, chunk, timestamp, sampleRate } = request;
+    const { userId, chunk, timestamp, sampleRate, streamId, maxSample, volume } = request;
+    const id = streamId || userId; // Support both formats
     
-    if (!userId || !chunk || !Array.isArray(chunk)) {
+    if (!id || !chunk || !Array.isArray(chunk)) {
       console.error('[Service Worker] Invalid audioChunk payload', request);
       this.stats.errors++;
       return { error: 'Invalid payload' };
@@ -234,25 +288,57 @@ class VTFTranscriptionService {
     
     this.stats.chunksReceived++;
     
-    // Get or create UserBufferManager instance (not plain object!)
-    if (!this.userBuffers.has(userId)) {
-      this.userBuffers.set(userId, new UserBufferManager(userId, this.config));
+    // Track activity for adaptive buffering
+    this.recentActivities.push(Date.now());
+    
+    // Speaker-aware buffering (matches working prototype)
+    if (!this.speakerBuffers.has(id)) {
+      this.speakerBuffers.set(id, {
+        buffer: [],
+        lastActivityTime: Date.now(),
+        pendingTranscripts: [],
+        totalSamples: 0,
+        startTime: Date.now()
+      });
     }
     
-    const buffer = this.userBuffers.get(userId);
+    const speakerBuffer = this.speakerBuffers.get(id);
+    speakerBuffer.lastActivityTime = Date.now();
+    
+    // Legacy support for UserBufferManager
+    if (!this.userBuffers.has(id)) {
+      this.userBuffers.set(id, new UserBufferManager(id, this.config));
+    }
+    
+    const buffer = this.userBuffers.get(id);
     
     // Convert Int16 back to Float32
     const float32Data = this.int16ToFloat32(chunk);
     
-    // Add to buffer
+    // Add to both buffers
     buffer.addChunk(float32Data, timestamp);
+    speakerBuffer.buffer.push({
+      samples: float32Data,
+      timestamp: timestamp || Date.now(),
+      maxSample: maxSample,
+      volume: volume
+    });
+    speakerBuffer.totalSamples += float32Data.length;
     
-    // Check if ready to transcribe
-    if (buffer.isReadyToTranscribe()) {
-      this.transcribeUserBuffer(userId);
+    // Use adaptive duration for checking if ready
+    const adaptiveDuration = this.getAdaptiveChunkDuration();
+    const duration = speakerBuffer.totalSamples / 16000;
+    
+    if (duration >= adaptiveDuration) {
+      this.transcribeUserBuffer(id);
     }
     
-    console.log(`[Service Worker] Chunk for ${userId}: ${chunk.length} samples, buffer: ${buffer.getTotalSamples()} total`);
+    console.log(`[Service Worker] Chunk for ${id}: ${chunk.length} samples, duration: ${duration.toFixed(2)}s, activity: ${this.activityLevel}`);
+    
+    // Periodically broadcast buffer status
+    if (this.stats.chunksReceived % 10 === 0) {
+      this.broadcastBufferStatus();
+    }
     
     return { received: true, bufferSize: buffer.getTotalSamples() };
   }
@@ -265,16 +351,41 @@ class VTFTranscriptionService {
       return;
     }
     
-    const buffer = this.userBuffers.get(userId);
-    if (!buffer || !buffer.hasData()) {
-      return;
+    // Check speaker buffer first (working prototype approach)
+    const speakerBuffer = this.speakerBuffers.get(userId);
+    if (speakerBuffer && speakerBuffer.totalSamples > 0) {
+      // Extract from speaker buffer
+      const allSamples = [];
+      const startTime = speakerBuffer.startTime;
+      
+      speakerBuffer.buffer.forEach(chunk => {
+        allSamples.push(...chunk.samples);
+      });
+      
+      // Clear speaker buffer
+      speakerBuffer.buffer = [];
+      speakerBuffer.totalSamples = 0;
+      speakerBuffer.startTime = Date.now();
+      
+      const audioData = {
+        samples: allSamples,
+        startTime,
+        duration: allSamples.length / 16000
+      };
+      
+      this.transcriptionQueue.set(userId, audioData);
+    } else {
+      // Fallback to legacy buffer
+      const buffer = this.userBuffers.get(userId);
+      if (!buffer || !buffer.hasData()) {
+        return;
+      }
+      
+      const audioData = buffer.extractForTranscription();
+      if (!audioData || audioData.samples.length === 0) return;
+      
+      this.transcriptionQueue.set(userId, audioData);
     }
-    
-    // Extract audio data and queue it
-    const audioData = buffer.extractForTranscription();
-    if (!audioData || audioData.samples.length === 0) return;
-    
-    this.transcriptionQueue.set(userId, audioData);
     
     // Process queue
     await this.processTranscriptionQueue();
@@ -564,12 +675,33 @@ class VTFTranscriptionService {
   
   getBufferDetails() {
     const details = {};
-    this.userBuffers.forEach((buffer, userId) => {
+    
+    // Include speaker buffers (primary)
+    this.speakerBuffers.forEach((buffer, streamId) => {
       const duration = buffer.totalSamples / 16000;
       if (duration > 0) {
-        details[userId] = duration;
+        details[streamId] = {
+          duration,
+          lastActivity: Date.now() - buffer.lastActivityTime,
+          speaker: this.getSpeakerName(streamId)
+        };
       }
     });
+    
+    // Include legacy buffers
+    this.userBuffers.forEach((buffer, userId) => {
+      if (!details[userId]) {
+        const duration = buffer.totalSamples / 16000;
+        if (duration > 0) {
+          details[userId] = {
+            duration,
+            lastActivity: Date.now() - buffer.lastActivity,
+            speaker: this.getSpeakerName(userId)
+          };
+        }
+      }
+    });
+    
     return details;
   }
   
@@ -662,10 +794,15 @@ class VTFTranscriptionService {
     this.stats.captureStartTime = Date.now();
     
     
+    this.speakerBuffers.clear();
     this.userBuffers.clear();
     this.activeTranscriptions.clear();
     this.retryCount.clear();
     this.lastError.clear();
+    
+    // Reset activity tracking
+    this.recentActivities = [];
+    this.activityLevel = 'idle';
     
     return { status: 'started' };
   }
@@ -825,9 +962,10 @@ class UserBufferManager {
   }
   
   
-  isReadyToTranscribe() {
+  isReadyToTranscribe(adaptiveDuration = null) {
     const duration = this.totalSamples / 16000;
-    return duration >= this.config.bufferDuration;
+    const targetDuration = adaptiveDuration || this.config.bufferDuration;
+    return duration >= targetDuration;
   }
   
   
@@ -916,29 +1054,84 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
+// CRITICAL: Always send response to prevent "message channel closed" error
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('[VTF Background] Received message:', request.type);
+  
+  // Initialize service if needed
+  if (!vtfService) {
+    vtfService = new VTFTranscriptionService();
+    vtfService.init();
+  }
+  
+  // Handle message types
   switch (request.type) {
+    case 'audioData':
+      // Handle audio data from content script (matches working prototype)
+      vtfService.handleAudioChunk({
+        userId: request.userId || request.streamId,
+        chunk: request.audioData,
+        timestamp: request.timestamp,
+        sampleRate: 16000,
+        streamId: request.streamId,
+        maxSample: request.maxSample,
+        volume: request.volume
+      }).then(response => {
+        sendResponse({ received: true, status: 'success', ...response });
+      }).catch(error => {
+        console.error('[VTF Background] Audio chunk error:', error);
+        sendResponse({ received: true, status: 'error', error: error.message });
+      });
+      break;
+      
     case 'audioChunk':
-      // Process audio data from page
-      if (!vtfService) {
-        vtfService = new VTFTranscriptionService();
-        vtfService.init();
-      }
+      // Legacy format support
       vtfService.handleAudioChunk({
         userId: request.userId,
         chunk: request.chunk,
         timestamp: request.timestamp,
-        sampleRate: request.sampleRate
+        sampleRate: request.sampleRate || 16000
+      }).then(response => {
+        sendResponse({ received: true, status: 'success', ...response });
+      }).catch(error => {
+        sendResponse({ received: true, status: 'error', error: error.message });
       });
       break;
+      
     case 'userJoined':
     case 'userLeft':
     case 'captureStarted':
     case 'captureStopped':
-      // Handle state changes (no-op for now)
+      // Handle state changes
+      vtfService.handleMessage(request, sender).then(response => {
+        sendResponse({ received: true, ...response });
+      }).catch(error => {
+        sendResponse({ received: true, error: error.message });
+      });
+      break;
+      
+    case 'startCapture':
+    case 'stopCapture':
+    case 'getStatus':
+    case 'setApiKey':
+    case 'getTranscriptions':
+    case 'updateSettings':
+      // Handle control messages
+      vtfService.handleMessage(request, sender).then(response => {
+        sendResponse({ received: true, ...response });
+      }).catch(error => {
+        sendResponse({ received: true, error: error.message });
+      });
+      break;
+      
+    default:
+      // Default response for unknown message types
+      console.warn('[VTF Background] Unknown message type:', request.type);
+      sendResponse({ received: true, error: 'Unknown message type' });
       break;
   }
-  sendResponse({ received: true });
+  
+  // CRITICAL: Return true to indicate async response
   return true;
 });
 

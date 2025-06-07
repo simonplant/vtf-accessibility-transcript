@@ -2,6 +2,24 @@
 (function() {
   'use strict';
   
+  // CRITICAL: Verify we're in the page context, not content script
+  const contextCheck = {
+    hasChrome: !!window.chrome,
+    hasRuntime: !!(window.chrome && window.chrome.runtime),
+    context: (window.chrome && window.chrome.runtime) ? 'CONTENT_SCRIPT' : 'PAGE'
+  };
+  
+  console.log('[VTF Inject] Context verification:', contextCheck);
+  console.log('[VTF Inject] Running in context:', contextCheck.context);
+  console.log('[VTF Inject] Document readyState:', document.readyState);
+  console.log('[VTF Inject] Window location:', window.location.href);
+  
+  // CRITICAL: If we're not in page context, abort!
+  if (contextCheck.context !== 'PAGE') {
+    console.error('[VTF Inject] FATAL: Not running in page context! Aborting.');
+    return;
+  }
+  
   console.log('[VTF Inject] Starting initialization sequence');
   
   // Initialization State Machine
@@ -44,16 +62,68 @@
     find() {
       this.discoveryAttempts++;
       
+      // Comprehensive logging for debugging
+      if (this.discoveryAttempts === 1 || this.discoveryAttempts % 5 === 0) {
+        console.log(`[VTF Inject] Globals discovery attempt #${this.discoveryAttempts}`);
+        console.log('[VTF Inject] Checking window.E_:', typeof window.E_, window.E_);
+        console.log('[VTF Inject] Checking E_ (direct):', typeof E_ !== 'undefined' ? E_ : 'undefined');
+        console.log('[VTF Inject] Window keys (first 30):', Object.keys(window).slice(0, 30));
+      }
+      
       try {
         // Method 1: Direct access to known location
         if (window.E_) {
+          console.log('[VTF Inject] window.E_ exists, validating...');
+          console.log('[VTF Inject] E_.audioVolume:', window.E_.audioVolume);
+          console.log('[VTF Inject] E_.sessData:', window.E_.sessData);
+          
+          // Validate it's fully initialized
+          if (!window.E_.sessData) {
+            console.log('[VTF Inject] E_ exists but sessData missing - not ready yet');
+            return false;
+          }
+          
           this.globals = window.E_;
           state.details.globalsLocation = 'window.E_';
-          console.log('[VTF Inject] Found globals at window.E_');
+          console.log('[VTF Inject] ✓ Found and validated globals at window.E_');
           return true;
         }
         
-        // Method 2: Scan for globals with validation
+        // Method 2: Try to access E_ directly (it might be a global variable not on window)
+        try {
+          if (typeof E_ !== 'undefined' && E_) {
+            this.globals = E_;
+            state.details.globalsLocation = 'E_ (global variable)';
+            console.log('[VTF Inject] Found globals at E_ (global variable)');
+            return true;
+          }
+        } catch (e) {
+          // E_ doesn't exist
+        }
+        
+        // Method 3: Look for window.Globals (capital G)
+        if (window.Globals) {
+          this.globals = window.Globals;
+          state.details.globalsLocation = 'window.Globals';
+          console.log('[VTF Inject] Found globals at window.Globals');
+          return true;
+        }
+        
+        // Method 4: Check for common VTF objects
+        const vtfObjects = ['globals', 'Globals', 'vtfGlobals', 'appGlobals'];
+        for (const objName of vtfObjects) {
+          if (window[objName] && typeof window[objName] === 'object') {
+            const obj = window[objName];
+            if (obj.audioVolume !== undefined || obj.sessData !== undefined) {
+              this.globals = obj;
+              state.details.globalsLocation = `window.${objName}`;
+              console.log(`[VTF Inject] Found globals at window.${objName}`);
+              return true;
+            }
+          }
+        }
+        
+        // Method 5: Scan for globals with validation
         for (const key in window) {
           try {
             if (key.length <= 3 && typeof window[key] === 'object' && window[key]) {
@@ -73,15 +143,46 @@
           }
         }
         
-        // Method 3: Check for VTF-specific services
+        // Method 6: Check for VTF-specific services
         if (window.appService) {
           this.appService = window.appService;
           console.log('[VTF Inject] Found appService');
+          
+          // Try to find globals through appService
+          if (this.appService.globals) {
+            this.globals = this.appService.globals;
+            state.details.globalsLocation = 'appService.globals';
+            console.log('[VTF Inject] Found globals at appService.globals');
+            return true;
+          }
         }
         
         if (window.mediaSoupService) {
           this.mediaSoupService = window.mediaSoupService;
           console.log('[VTF Inject] Found mediaSoupService');
+        }
+        
+        // Aggressive logging for debugging
+        if (this.discoveryAttempts === 1 || this.discoveryAttempts % 5 === 0) {
+          console.log(`[VTF Inject] Discovery attempt ${this.discoveryAttempts}: No globals found yet`);
+          console.log('[VTF Inject] Checking for Angular:', typeof window.ng !== 'undefined');
+          console.log('[VTF Inject] Checking for React:', typeof window.React !== 'undefined');
+          console.log('[VTF Inject] Document ready state:', document.readyState);
+          console.log('[VTF Inject] Body element exists:', !!document.body);
+          console.log('[VTF Inject] topRoomDiv exists:', !!document.getElementById('topRoomDiv'));
+          
+          // Log all single-letter globals (common pattern)
+          const singleLetterGlobals = Object.keys(window).filter(k => k.length === 1 || k.length === 2);
+          console.log('[VTF Inject] Single/two-letter globals:', singleLetterGlobals);
+          
+          // Check for VTF-specific elements
+          const vtfElements = {
+            topRoomDiv: !!document.getElementById('topRoomDiv'),
+            roomDiv: !!document.getElementById('roomDiv'),
+            audioElements: document.querySelectorAll('audio').length,
+            msRemAudioElements: document.querySelectorAll('audio[id^="msRemAudio-"]').length
+          };
+          console.log('[VTF Inject] VTF elements status:', vtfElements);
         }
         
         return false;
@@ -235,8 +336,47 @@
   
   const captureAudioElement = (element) => {
     const userId = element.id.replace('msRemAudio-', '');
+    const streamId = userId; // Use same ID for both
+    
+    console.log(`[VTF Inject] Attempting to capture audio element:`, {
+      id: element.id,
+      userId: userId,
+      hasSrcObject: !!element.srcObject,
+      srcObjectType: element.srcObject?.constructor?.name,
+      audioTracks: element.srcObject?.getAudioTracks?.()?.length || 0,
+      readyState: element.readyState,
+      paused: element.paused,
+      muted: element.muted,
+      volume: element.volume
+    });
     
     try {
+      // Monitor srcObject changes like the working prototype
+      const originalDescriptor = Object.getOwnPropertyDescriptor(element, 'srcObject');
+      Object.defineProperty(element, 'srcObject', {
+        set: function(value) {
+          console.log(`[VTF Inject] srcObject changed for ${streamId}`, value);
+          this._srcObject = value;
+          
+          if (originalDescriptor && originalDescriptor.set) {
+            originalDescriptor.set.call(this, value);
+          }
+          
+          if (value instanceof MediaStream) {
+            // Re-capture after stream change
+            setTimeout(() => {
+              if (audioCaptures.has(userId)) {
+                cleanupCapture(userId);
+              }
+              captureAudioElement(element);
+            }, 100);
+          }
+        },
+        get: function() {
+          return this._srcObject || (originalDescriptor && originalDescriptor.get ? originalDescriptor.get.call(this) : undefined);
+        }
+      });
+      
       const stream = element.srcObject;
       
       if (!stream) {
@@ -290,13 +430,17 @@
             int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
           }
           
-          sendMessage('audioData', {
+          // Use the same message format as the working prototype
+          window.postMessage({
+            type: 'VTF_AUDIO_DATA',
+            streamId: userId,
             userId: userId,
-            samples: Array.from(int16Data),
+            audioData: Array.from(int16Data),
             timestamp: Date.now(),
+            maxSample: maxSample,
             volume: volume,
             chunkIndex: chunkCount++
-          });
+          }, '*');
         } catch (error) {
           console.error('[VTF Inject] Audio processing error:', error);
           sendMessage('error', {
@@ -529,28 +673,28 @@
     }
   };
   
-  // Main initialization sequence with proper async coordination
+  // Main initialization sequence - resilient and never gives up
   const initialize = async () => {
     console.log('[VTF Inject] Starting initialization sequence');
     state.phase = InitState.PENDING;
     
     try {
-      // Phase 1: Discover globals
+      // Phase 1: Discover globals (polls forever until found)
       state.phase = InitState.DISCOVERING_GLOBALS;
       sendMessage('initializationProgress', { 
         phase: state.phase,
         message: 'Discovering VTF globals...'
       }, 'high');
       
-      const globalsFound = await discoverGlobals();
-      
-      if (!globalsFound) {
-        throw new Error('VTF globals not found after timeout');
-      }
+      // This will wait forever until globals are found
+      await discoverGlobals();
       
       state.globalsFound = true;
       state.details.audioVolume = vtfGlobals.globals?.audioVolume;
       state.details.sessionState = vtfGlobals.globals?.sessData?.currentState;
+      
+      // Watch for globals being replaced
+      watchGlobals();
       
       // Phase 2: Setup DOM observer
       state.phase = InitState.SETTING_UP_OBSERVERS;
@@ -577,15 +721,38 @@
       const hooks = hookVTFFunctions();
       state.hooksApplied = hooks.length > 0;
       
-      // Phase 4: Process existing elements
-      const existingElements = document.querySelectorAll('audio[id^="msRemAudio-"]');
-      console.log(`[VTF Inject] Found ${existingElements.length} existing audio elements`);
-      
-      existingElements.forEach(element => {
-        if (element.srcObject) {
-          captureAudioElement(element);
+      // Phase 4: Process existing elements and keep looking for more
+      const processExistingAudioElements = () => {
+        const existingElements = document.querySelectorAll('audio[id^="msRemAudio-"]');
+        console.log(`[VTF Inject] Found ${existingElements.length} existing audio elements`);
+        
+        let capturedCount = 0;
+        existingElements.forEach(element => {
+          if (element.srcObject && !audioCaptures.has(element.id.replace('msRemAudio-', ''))) {
+            captureAudioElement(element);
+            capturedCount++;
+          }
+        });
+        
+        if (capturedCount > 0) {
+          console.log(`[VTF Inject] Captured ${capturedCount} audio elements`);
         }
-      });
+        
+        return existingElements.length;
+      };
+      
+      // Initial check
+      processExistingAudioElements();
+      
+      // Keep checking periodically in case elements appear later
+      const audioCheckInterval = setInterval(() => {
+        const count = processExistingAudioElements();
+        // Can stop checking once we have a reasonable number of elements
+        if (count > 0 && audioCaptures.size > 0) {
+          clearInterval(audioCheckInterval);
+          console.log('[VTF Inject] Stopping periodic audio element check');
+        }
+      }, 2000);
       
       // Phase 5: Mark as ready
       state.phase = InitState.READY;
@@ -627,16 +794,16 @@
     }
   };
   
-  // Async globals discovery with timeout
+  // Stubborn globals discovery - polls forever until found (no timeout)
   const discoverGlobals = () => {
     return new Promise((resolve) => {
-      const maxAttempts = 60; // 30 seconds
       let attempts = 0;
       
       const tryDiscover = () => {
         attempts++;
         
         if (vtfGlobals.find()) {
+          console.log(`[VTF Inject] Globals found after ${attempts} attempts!`);
           sendMessage('globalsFound', { 
             hasGlobals: true,
             location: state.details.globalsLocation,
@@ -645,19 +812,19 @@
             attempts: attempts
           }, 'high');
           resolve(true);
-        } else if (attempts >= maxAttempts) {
-          state.errors.push({ 
-            type: 'globalsDiscovery', 
-            error: `Timeout after ${attempts} attempts (${attempts * 0.5}s)`,
-            lastError: vtfGlobals.lastError?.message
-          });
-          sendMessage('globalsFound', { 
-            hasGlobals: false,
-            error: vtfGlobals.lastError?.message || 'Not found after timeout',
-            attempts: attempts
-          }, 'high');
-          resolve(false);
         } else {
+          // Never give up - this is the key to making it work!
+          // Log progress every 20 attempts (10 seconds)
+          if (attempts % 20 === 0) {
+            console.log(`[VTF Inject] Still looking for globals... (attempt ${attempts})`);
+            sendMessage('initializationProgress', { 
+              phase: state.phase,
+              message: `Still looking for VTF globals... (${attempts * 0.5}s elapsed)`,
+              attempts: attempts
+            });
+          }
+          
+          // Keep trying forever
           setTimeout(tryDiscover, 500);
         }
       };
@@ -682,11 +849,104 @@
     }
   });
   
-  // Start initialization
+  // Watch for globals being replaced/moved
+  const watchGlobals = () => {
+    if (!vtfGlobals.globals) return;
+    
+    const location = state.details.globalsLocation;
+    if (!location) return;
+    
+    // Use Object.defineProperty to detect if globals are replaced
+    if (location === 'window.E_') {
+      const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'E_');
+      Object.defineProperty(window, 'E_', {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return this._E_;
+        },
+        set(value) {
+          console.log('[VTF Inject] WARNING: window.E_ is being replaced!', value);
+          this._E_ = value;
+          vtfGlobals.globals = value;
+          
+          // Re-apply hooks if globals were replaced
+          if (value && state.initialized) {
+            console.log('[VTF Inject] Re-applying hooks after globals replacement');
+            hookVTFFunctions();
+          }
+        }
+      });
+      
+      // Set initial value
+      window._E_ = vtfGlobals.globals;
+    }
+  };
+  
+  // Listen for SPA navigation events
+  const handleSPANavigation = () => {
+    console.log('[VTF Inject] SPA navigation detected, re-checking state');
+    
+    // Re-check globals
+    if (!vtfGlobals.globals || !vtfGlobals.find()) {
+      console.log('[VTF Inject] Globals lost after navigation, re-initializing...');
+      state.initialized = false;
+      state.globalsFound = false;
+      initialize();
+    } else {
+      // Re-process audio elements
+      const processExistingAudioElements = () => {
+        const existingElements = document.querySelectorAll('audio[id^="msRemAudio-"]');
+        console.log(`[VTF Inject] Re-checking ${existingElements.length} audio elements after navigation`);
+        
+        existingElements.forEach(element => {
+          if (element.srcObject && !audioCaptures.has(element.id.replace('msRemAudio-', ''))) {
+            captureAudioElement(element);
+          }
+        });
+      };
+      
+      processExistingAudioElements();
+    }
+  };
+  
+  // Listen for navigation events
+  window.addEventListener('popstate', handleSPANavigation);
+  window.addEventListener('hashchange', handleSPANavigation);
+  
+  // Listen for custom VTF events
+  const customEvents = ['VTFReady', 'vtfReady', 'appReady', 'roomReady'];
+  customEvents.forEach(eventName => {
+    window.addEventListener(eventName, (event) => {
+      console.log(`[VTF Inject] Custom event received: ${eventName}`, event);
+      
+      // Re-check initialization
+      if (!state.initialized) {
+        console.log('[VTF Inject] Re-initializing after custom event');
+        initialize();
+      }
+    });
+  });
+  
+  // Watch for URL changes without page reload (SPA)
+  let lastUrl = location.href;
+  new MutationObserver(() => {
+    const url = location.href;
+    if (url !== lastUrl) {
+      lastUrl = url;
+      console.log('[VTF Inject] URL changed to:', url);
+      handleSPANavigation();
+    }
+  }).observe(document, { subtree: true, childList: true });
+  
+  // Start initialization immediately - our stubborn polling handles timing
+  console.log('[VTF Inject] Document readyState:', document.readyState);
+  console.log('[VTF Inject] Starting stubborn initialization...');
   initialize();
   
   // Expose state for debugging
   window.__vtfInjectState = state;
   window.__vtfInjectCaptures = audioCaptures;
   window.__vtfInjectGlobals = vtfGlobals;
+  window.__vtfInjectVersion = '0.8.0';
 })();

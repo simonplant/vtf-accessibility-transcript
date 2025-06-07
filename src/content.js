@@ -182,42 +182,70 @@ class VTFExtensionBridge {
   
   injectScript() {
     return new Promise((resolve, reject) => {
+      // Log injection context
+      console.log('[VTF Extension] Injecting script...');
+      console.log('[VTF Extension] Document readyState:', document.readyState);
+      console.log('[VTF Extension] Current URL:', window.location.href);
+      console.log('[VTF Extension] Has head:', !!document.head);
+      console.log('[VTF Extension] Has documentElement:', !!document.documentElement);
+      
       const script = document.createElement('script');
       script.src = chrome.runtime.getURL('inject/inject.js');
       
+      // Add attributes to help with CSP
+      script.setAttribute('data-vtf-inject', 'true');
+      script.setAttribute('data-timestamp', Date.now().toString());
+      
       script.onload = () => {
-        script.remove();
-        console.log('[VTF Extension] Inject script loaded');
+        console.log('[VTF Extension] Inject script loaded successfully');
+        // Don't remove immediately - let it initialize
+        setTimeout(() => script.remove(), 100);
         resolve();
       };
       
-      script.onerror = () => {
+      script.onerror = (error) => {
+        console.error('[VTF Extension] Failed to load inject script:', error);
         reject(new Error('Failed to load inject script'));
       };
       
-      (document.head || document.documentElement).appendChild(script);
+      // Try multiple injection points for robustness
+      const target = document.head || document.documentElement;
+      if (target) {
+        target.appendChild(script);
+        console.log('[VTF Extension] Script injected into:', target.tagName);
+      } else {
+        console.error('[VTF Extension] No suitable injection target found!');
+        reject(new Error('No injection target'));
+      }
     });
   }
   
-  waitForInitialization(timeout = 30000) {
+  waitForInitialization(timeout = null) {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
+      let checkCount = 0;
       
       const checkInitialized = () => {
+        checkCount++;
+        
         // Check for successful initialization
         if (this.state.initialized && this.state.initPhase === this.InitPhase.READY) {
+          console.log(`[VTF Extension] Initialization succeeded after ${checkCount} checks`);
           resolve();
         } 
-        // Check for failure
-        else if (this.state.initPhase === this.InitPhase.FAILED) {
+        // Check for failure - but only if inject script explicitly failed
+        else if (this.state.initPhase === this.InitPhase.FAILED && this.state.lastError) {
           reject(new Error(this.state.lastError || 'Initialization failed'));
         }
-        // Check for timeout
-        else if (Date.now() - startTime > timeout) {
+        // No timeout by default - keep waiting forever
+        else if (timeout && Date.now() - startTime > timeout) {
           reject(new Error(`Initialization timeout after ${timeout}ms in phase: ${this.state.initPhase}`));
         } 
-        // Continue waiting
+        // Continue waiting - log progress periodically
         else {
+          if (checkCount % 100 === 0) { // Every 10 seconds
+            console.log(`[VTF Extension] Still waiting for initialization... (${checkCount * 0.1}s elapsed, phase: ${this.state.initPhase})`);
+          }
           setTimeout(checkInitialized, 100);
         }
       };
@@ -228,7 +256,32 @@ class VTFExtensionBridge {
   
   setupMessageHandlers() {
     window.addEventListener('message', (event) => {
-      // Strict source checking
+      // Handle VTF_AUDIO_DATA messages like the working prototype
+      if (event.data && event.data.type === 'VTF_AUDIO_DATA') {
+        if (this.state.capturing) {
+          this.state.stats.audioChunksRelayed++;
+          
+          // Relay to background with proper format
+          chrome.runtime.sendMessage({
+            type: 'audioData',
+            audioData: event.data.audioData,
+            timestamp: event.data.timestamp,
+            streamId: event.data.streamId,
+            userId: event.data.userId,
+            chunkNumber: this.state.stats.audioChunksRelayed,
+            maxSample: event.data.maxSample,
+            volume: event.data.volume
+          }, response => {
+            if (chrome.runtime.lastError) {
+              console.error('[VTF Extension] Background message error:', chrome.runtime.lastError);
+              this.state.stats.errors++;
+            }
+          });
+        }
+        return;
+      }
+      
+      // Strict source checking for other messages
       if (event.data.source !== 'vtf-inject') return;
       
       this.state.stats.messagesReceived++;
@@ -495,7 +548,22 @@ class VTFExtensionBridge {
     }, '*');
   }
   
+  isExtensionValid() {
+    try {
+      return chrome.runtime && chrome.runtime.id;
+    } catch (e) {
+      return false;
+    }
+  }
+  
   sendToBackground(message) {
+    // Check if extension context is still valid
+    if (!this.isExtensionValid()) {
+      console.error('[VTF Extension] Extension context invalid, cannot send message');
+      this.state.stats.errors++;
+      return;
+    }
+    
     this.state.stats.messagesSent++;
     
     chrome.runtime.sendMessage(message, response => {

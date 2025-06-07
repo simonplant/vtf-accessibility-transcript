@@ -168,7 +168,7 @@ class VTFPopup {
     // Map phases to user-friendly messages
     const phaseMessages = {
       'pending': 'Starting initialization...',
-      'discovering_globals': 'Finding VTF components...',
+      'discovering_globals': 'Waiting for VTF to load...',
       'setting_up_observers': 'Setting up audio monitoring...',
       'applying_hooks': 'Connecting to VTF functions...',
       'ready': 'Ready',
@@ -191,7 +191,15 @@ class VTFPopup {
     } else {
       this.elements.extensionStatus.textContent = 'Initializing';
       this.elements.extensionStatus.className = 'status-value warning';
-      this.showExtensionState(progress || message, 'info');
+      
+      // Special handling for globals discovery phase
+      if (phase === 'discovering_globals' && progress) {
+        // Show progress with elapsed time if available
+        this.showExtensionState(progress, 'info');
+      } else {
+        this.showExtensionState(progress || message, 'info');
+      }
+      
       this.disableControls();
     }
     
