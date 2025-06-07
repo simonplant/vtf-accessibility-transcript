@@ -3,6 +3,75 @@
 ## Overview
 This document summarizes all the improvements made to the VTF Audio Extension for better reliability, performance, and user experience.
 
+## Latest Updates
+
+### Initialization Flow Overhaul (Deep Fix)
+
+**Problem:** The extension was reporting as "initialized" before critical components were ready, causing audio capture to fail silently.
+
+**Root Causes:**
+1. Asynchronous operations (globals discovery, DOM observer setup) were not properly coordinated
+2. The inject script marked itself as initialized immediately, without waiting for prerequisites
+3. No clear state machine for initialization phases
+4. Race condition between message handler setup and script injection
+5. Poor error communication between layers
+
+**Solution Implemented:**
+
+#### 1. State Machine Architecture
+- Added clear initialization phases: `PENDING` → `DISCOVERING_GLOBALS` → `SETTING_UP_OBSERVERS` → `APPLYING_HOOKS` → `READY` or `FAILED`
+- Each phase must complete successfully before proceeding
+- Progress is communicated to UI at each phase
+
+#### 2. Proper Async Coordination
+```javascript
+// Old (broken) approach:
+findGlobalsWithRetry();      // Async, not awaited
+setupDOMObserver();          // Might fail
+state.initialized = true;    // Marked ready immediately!
+
+// New approach:
+const globalsFound = await discoverGlobals();
+if (!globalsFound) throw new Error('VTF globals not found');
+
+const observerReady = await setupDOMObserver();
+if (!observerReady) throw new Error('Failed to setup observer');
+
+// Only mark ready after everything succeeds
+state.phase = InitState.READY;
+state.initialized = true;
+```
+
+#### 3. Enhanced Error Handling
+- Detailed error tracking at each phase
+- Timeout handling with meaningful messages
+- Error propagation from inject → content → popup
+- Recovery mechanisms for transient failures
+
+#### 4. Message Queue System
+- Prevents lost messages during initialization
+- Queues messages until handlers are ready
+- Flushes queue once initialization completes
+
+#### 5. UI Progress Tracking
+- Real-time initialization progress in popup
+- Clear indication of which component failed
+- Detailed state information for debugging
+
+### Key Benefits
+1. **Reliability**: Extension only reports ready when truly functional
+2. **Debuggability**: Clear visibility into initialization failures
+3. **User Experience**: Progress feedback during initialization
+4. **Maintainability**: Clean separation of initialization phases
+
+### Testing the Fix
+1. Open the extension on VTF page
+2. Watch the popup for initialization progress
+3. Check console for detailed phase transitions
+4. Verify audio capture only enabled when fully ready
+
+---
+
 ## 🔧 Core Fixes Implemented
 
 ### 1. **Error Handling & Logging**

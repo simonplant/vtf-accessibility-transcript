@@ -1,68 +1,73 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
+  <title>VTF Audio Extension</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="popup">
-  <!-- Header -->
-  <div class="popup-header">
-    <h1>VTF Audio Transcription</h1>
-    <div class="status-indicator" id="statusIndicator"></div>
-  </div>
-  
-  <!-- Extension State Warning (if needed) -->
-  <div class="extension-state hidden" id="extensionState">
-    <span>⚠️</span>
-    <span id="stateMessage">Extension is initializing...</span>
-  </div>
-  
-  <!-- Main Controls -->
-  <div class="popup-controls">
-    <button id="startBtn" class="btn btn-primary" disabled>
-      <span id="btnText">Start Capture</span>
-      <span class="recording-dot hidden" id="recordingDot"></span>
-    </button>
-    <button id="refreshBtn" class="btn btn-secondary" title="Refresh Status">↻</button>
-    <button id="optionsBtn" class="btn btn-secondary" title="Settings">⚙️</button>
-  </div>
-  
-  <!-- Status Grid -->
-  <div class="popup-status">
-    <div class="status-grid">
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <div class="header">
+      <h1>VTF Audio Transcription</h1>
+      <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
+    </div>
+    
+    <!-- Extension State Message -->
+    <div id="extensionState" class="extension-state" style="display: none;"></div>
+    
+    <!-- Status Section -->
+    <div class="status-section">
       <div class="status-item">
-        <div class="status-label">Extension</div>
-        <div class="status-value" id="extensionStatus">Checking...</div>
+        <span class="status-label">Extension:</span>
+        <span id="extensionStatus" class="status-value">Checking...</span>
       </div>
       <div class="status-item">
         <span class="status-label">API Key:</span>
-        <span id="apiKeyStatus" class="status-value warning">Checking...</span>
+        <span id="apiKeyStatus" class="status-value">Checking...</span>
       </div>
       <div class="status-item">
-        <span class="status-label">API Health:</span>
-        <span id="apiHealthStatus" class="status-value">Checking...</span>
-      </div>
-      <div class="status-item">
-        <div class="status-label">Active Users</div>
-        <div class="status-value" id="activeUsers">0</div>
-      </div>
-      <div class="status-item">
-        <span class="status-label">Transcriptions:</span>
-        <span id="transcriptionCount" class="status-value">0</span>
+        <span class="status-label">Capture:</span>
+        <span id="captureStatus" class="status-value">Stopped</span>
       </div>
     </div>
-  </div>
-  
-  <!-- Active Speakers -->
-  <div class="active-speakers hidden" id="activeSpeakers">
-    <h3>Recording Audio From</h3>
-    <div class="speakers-grid" id="speakersGrid"></div>
-  </div>
-  
-  <!-- Transcriptions -->
-  <div class="transcriptions">
-    <h3>Recent Transcriptions</h3>
-    <div class="transcript-list" id="transcriptList">
-      <div class="empty-state">No transcriptions yet. Click Start Capture to begin.</div>
+    
+    <!-- Controls -->
+    <div class="controls">
+      <button id="startCapture" class="control-btn primary">
+        Start Capture
+      </button>
+      <button id="stopCapture" class="control-btn secondary" disabled>
+        Stop Capture
+      </button>
+    </div>
+    
+    <!-- Stats Section -->
+    <div class="stats-section">
+      <div class="stat-item">
+        <div class="stat-value" id="activeUsers">0</div>
+        <div class="stat-label">Active Users</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="audioChunks">0</div>
+        <div class="stat-label">Audio Chunks</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="transcriptions">0</div>
+        <div class="stat-label">Transcriptions</div>
+      </div>
+    </div>
+    
+    <!-- Active Speakers -->
+    <div id="activeSpeakers" class="section hidden">
+      <h2>Active Speakers</h2>
+      <div id="speakersGrid" class="speakers-grid"></div>
+    </div>
+    
+    <!-- Recent Transcriptions -->
+    <div id="recentTranscriptions" class="section hidden">
+      <h2>Recent Transcriptions</h2>
+      <div id="transcriptionsList" class="transcriptions-list"></div>
     </div>
   </div>
   
