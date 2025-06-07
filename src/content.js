@@ -4,11 +4,9 @@ class VTFExtensionBridge {
     // Initialization phases mirror inject script
     this.InitPhase = {
       PENDING: 'pending',
-      DISCOVERING_GLOBALS: 'discovering_globals',
-      SETTING_UP_OBSERVERS: 'setting_up_observers',
-      APPLYING_HOOKS: 'applying_hooks',
-      READY: 'ready',
-      FAILED: 'failed'
+      SETTING_UP_AUDIO: 'setting_up_audio',
+      CAPTURING: 'capturing',
+      READY: 'ready'
     };
     
     this.state = {
@@ -307,11 +305,16 @@ class VTFExtensionBridge {
             
           case 'globalsFound':
             this.state.globalsFound = event.data.data.hasGlobals;
-            console.log('[VTF Extension] Globals found:', event.data.data);
+            console.log('[VTF Extension] BONUS: Globals found!', event.data.data);
             
-            if (!event.data.data.hasGlobals && event.data.data.error) {
-              this.handleError('globalsDiscovery', event.data.data.error);
-            }
+            // Globals are now optional - finding them is a bonus
+            // Update UI to show enhanced features available
+            chrome.runtime.sendMessage({
+              type: 'globalsDiscovered',
+              audioVolume: event.data.data.audioVolume,
+              sessionState: event.data.data.sessionState,
+              attempts: event.data.data.attempts
+            });
             break;
             
           case 'audioData':
@@ -386,14 +389,11 @@ class VTFExtensionBridge {
     
     // Update specific state flags based on phase
     switch (data.phase) {
-      case this.InitPhase.DISCOVERING_GLOBALS:
-        // Globals discovery in progress
+      case this.InitPhase.SETTING_UP_AUDIO:
+        // Setting up audio monitoring
         break;
-      case this.InitPhase.SETTING_UP_OBSERVERS:
-        // Observer setup in progress
-        break;
-      case this.InitPhase.APPLYING_HOOKS:
-        // Hook application in progress
+      case this.InitPhase.CAPTURING:
+        // Started capturing audio
         break;
     }
     
@@ -408,16 +408,30 @@ class VTFExtensionBridge {
   handleInitialized(data) {
     this.state.initialized = true;
     this.state.initPhase = data.phase || this.InitPhase.READY;
-    this.state.globalsFound = true;
     this.state.observerSetup = true;
-    this.state.hooksApplied = data.details?.appliedHooks?.length > 0;
+    
+    // Globals are now optional - not required for initialization
+    this.state.globalsFound = data.globalsFound || false;
+    this.state.hooksApplied = data.details?.hooksApplied || false;
     
     const initDuration = Date.now() - this.state.initStartTime;
     console.log(`[VTF Extension] Inject script initialized successfully in ${initDuration}ms`);
-    console.log('[VTF Extension] Init details:', data.details);
+    console.log('[VTF Extension] AUDIO-FIRST initialization complete:', {
+      audioElements: data.audioElements,
+      capturedElements: data.capturedElements,
+      globalsFound: data.globalsFound,
+      details: data.details
+    });
     
     // Store the details
     this.lastInjectState = data;
+    
+    // Update badge to show we're capturing
+    chrome.runtime.sendMessage({ 
+      type: 'updateBadge', 
+      text: 'ON',
+      color: '#4CAF50'
+    });
   }
   
   handleInitFailed(data) {

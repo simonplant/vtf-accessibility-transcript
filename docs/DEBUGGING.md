@@ -10,28 +10,25 @@ Look for: `[VTF Inject] Running in context: PAGE`
 - ❌ `CONTENT_SCRIPT` = Bad, still sandboxed
 - ❌ No log = Script didn't inject at all
 
-### 2. Globals Discovery
-Look for discovery attempts every 2.5 seconds:
+### 2. AUDIO-FIRST Initialization 🎵
+Look for immediate audio monitoring:
 ```
-[VTF Inject] Globals discovery attempt #1
-[VTF Inject] Checking window.E_: undefined
-[VTF Inject] Single/two-letter globals: ['E_', 'Q', 'R']
-```
-
-When found:
-```
-[VTF Inject] ✓ Found and validated globals at window.E_
+[VTF Inject] Starting AUDIO-FIRST initialization
+[VTF Inject] DOM observer active, watching for audio elements
+[VTF Inject] Audio scan: 5 total, 2 msRemAudio
+[VTF Inject] Initial scan complete: 2 audio elements captured
 ```
 
-### 3. Audio Elements
-Look for:
+The extension now captures audio IMMEDIATELY, without waiting for globals!
+
+### 3. Optional Globals Discovery (Background)
+Globals are now discovered in the background - NOT required for audio capture:
 ```
-[VTF Inject] VTF elements status: {
-  topRoomDiv: true,
-  audioElements: 3,
-  msRemAudioElements: 2
-}
+[VTF Inject] Starting OPTIONAL globals discovery in background...
+[VTF Inject] BONUS: Found globals after 5 attempts!
 ```
+
+If globals are never found, the extension still works perfectly for audio!
 
 ### 4. Navigation Events
 On room changes or navigation:

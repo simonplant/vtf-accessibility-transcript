@@ -25,11 +25,9 @@
   // Initialization State Machine
   const InitState = {
     PENDING: 'pending',
-    DISCOVERING_GLOBALS: 'discovering_globals',
-    SETTING_UP_OBSERVERS: 'setting_up_observers',
-    APPLYING_HOOKS: 'applying_hooks',
-    READY: 'ready',
-    FAILED: 'failed'
+    SETTING_UP_AUDIO: 'setting_up_audio',
+    CAPTURING: 'capturing',
+    READY: 'ready'
   };
   
   // State management with detailed tracking
@@ -335,19 +333,30 @@
   }
   
   const captureAudioElement = (element) => {
-    const userId = element.id.replace('msRemAudio-', '');
+    // Generate userId from element ID or create one
+    let userId;
+    if (element.id) {
+      userId = element.id.replace('msRemAudio-', '');
+    } else {
+      // Generate a unique ID for elements without IDs
+      userId = `audio-${element.tagName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      element.setAttribute('data-vtf-capture-id', userId);
+    }
+    
     const streamId = userId; // Use same ID for both
     
     console.log(`[VTF Inject] Attempting to capture audio element:`, {
-      id: element.id,
-      userId: userId,
+      id: element.id || 'no-id',
+      generatedId: userId,
       hasSrcObject: !!element.srcObject,
       srcObjectType: element.srcObject?.constructor?.name,
       audioTracks: element.srcObject?.getAudioTracks?.()?.length || 0,
       readyState: element.readyState,
       paused: element.paused,
       muted: element.muted,
-      volume: element.volume
+      volume: element.volume,
+      className: element.className,
+      dataset: element.dataset
     });
     
     try {
@@ -512,83 +521,7 @@
     }
   };
   
-  // Enhanced DOM Monitoring with retry logic
-  let observerRetries = 0;
-  const MAX_OBSERVER_RETRIES = 5;
-  
-  const setupDOMObserver = async () => {
-    return new Promise((resolve) => {
-      const attemptSetup = () => {
-        try {
-          const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-              mutation.addedNodes.forEach((node) => {
-                if (node.nodeName === 'AUDIO' && node.id?.startsWith('msRemAudio-')) {
-                  console.log(`[VTF Inject] New audio element: ${node.id}`);
-                  
-                  // Stream detection with timeout
-                  let attempts = 0;
-                  const maxAttempts = 100; // 5 seconds
-                  
-                  const checkStream = setInterval(() => {
-                    attempts++;
-                    
-                    if (node.srcObject) {
-                      clearInterval(checkStream);
-                      captureAudioElement(node);
-                    } else if (attempts >= maxAttempts) {
-                      clearInterval(checkStream);
-                      sendMessage('error', {
-                        context: 'streamDetection',
-                        userId: node.id.replace('msRemAudio-', ''),
-                        error: 'Stream detection timeout after 5 seconds'
-                      });
-                    }
-                  }, 50);
-                }
-              });
-              
-              mutation.removedNodes.forEach((node) => {
-                if (node.nodeName === 'AUDIO' && node.id?.startsWith('msRemAudio-')) {
-                  const userId = node.id.replace('msRemAudio-', '');
-                  console.log(`[VTF Inject] Audio element removed: ${userId}`);
-                  cleanupCapture(userId);
-                }
-              });
-            });
-          });
-          
-          // Find target with fallback
-          const target = document.getElementById('topRoomDiv') || document.body;
-          observer.observe(target, { 
-            childList: true, 
-            subtree: true,
-            attributes: false
-          });
-          
-          state.details.observerTarget = target.id || 'body';
-          console.log(`[VTF Inject] DOM observer started on ${state.details.observerTarget}`);
-          resolve(true);
-          
-        } catch (error) {
-          observerRetries++;
-          console.error('[VTF Inject] Failed to setup observer:', error);
-          
-          if (observerRetries < MAX_OBSERVER_RETRIES) {
-            setTimeout(() => attemptSetup(), 1000 * observerRetries);
-          } else {
-            state.errors.push({
-              type: 'observer',
-              error: 'Failed to setup DOM observer after retries'
-            });
-            resolve(false);
-          }
-        }
-      };
-      
-      attemptSetup();
-    });
-  };
+  // Removed old setupDOMObserver - DOM monitoring is now integrated into initialize()
   
   // Command Handler
   const handleCommand = (command, data) => {
@@ -673,165 +606,171 @@
     }
   };
   
-  // Main initialization sequence - resilient and never gives up
-  const initialize = async () => {
-    console.log('[VTF Inject] Starting initialization sequence');
+  // Main initialization - AUDIO FIRST, globals optional
+  const initialize = () => {
+    console.log('[VTF Inject] Starting AUDIO-FIRST initialization');
     state.phase = InitState.PENDING;
     
-    try {
-      // Phase 1: Discover globals (polls forever until found)
-      state.phase = InitState.DISCOVERING_GLOBALS;
-      sendMessage('initializationProgress', { 
-        phase: state.phase,
-        message: 'Discovering VTF globals...'
-      }, 'high');
+    // Phase 1: IMMEDIATELY start monitoring for audio elements
+    state.phase = InitState.SETTING_UP_AUDIO;
+    sendMessage('initializationProgress', { 
+      phase: state.phase,
+      message: 'Setting up audio monitoring...'
+    }, 'high');
+    
+    // Process existing audio elements RIGHT AWAY
+    const processAudioElements = () => {
+      const allAudioElements = document.querySelectorAll('audio');
+      const msRemAudioElements = document.querySelectorAll('audio[id^="msRemAudio-"]');
       
-      // This will wait forever until globals are found
-      await discoverGlobals();
+      console.log(`[VTF Inject] Audio scan: ${allAudioElements.length} total, ${msRemAudioElements.length} msRemAudio`);
       
-      state.globalsFound = true;
-      state.details.audioVolume = vtfGlobals.globals?.audioVolume;
-      state.details.sessionState = vtfGlobals.globals?.sessData?.currentState;
+      let capturedCount = 0;
       
-      // Watch for globals being replaced
-      watchGlobals();
-      
-      // Phase 2: Setup DOM observer
-      state.phase = InitState.SETTING_UP_OBSERVERS;
-      sendMessage('initializationProgress', { 
-        phase: state.phase,
-        message: 'Setting up DOM observers...'
-      }, 'high');
-      
-      const observerReady = await setupDOMObserver();
-      
-      if (!observerReady) {
-        throw new Error('Failed to setup DOM observer');
-      }
-      
-      state.observerSetup = true;
-      
-      // Phase 3: Apply hooks
-      state.phase = InitState.APPLYING_HOOKS;
-      sendMessage('initializationProgress', { 
-        phase: state.phase,
-        message: 'Applying function hooks...'
-      }, 'high');
-      
-      const hooks = hookVTFFunctions();
-      state.hooksApplied = hooks.length > 0;
-      
-      // Phase 4: Process existing elements and keep looking for more
-      const processExistingAudioElements = () => {
-        const existingElements = document.querySelectorAll('audio[id^="msRemAudio-"]');
-        console.log(`[VTF Inject] Found ${existingElements.length} existing audio elements`);
-        
-        let capturedCount = 0;
-        existingElements.forEach(element => {
-          if (element.srcObject && !audioCaptures.has(element.id.replace('msRemAudio-', ''))) {
+      // Capture from any audio element with the right pattern
+      allAudioElements.forEach(element => {
+        // Check various patterns that might indicate user audio
+        if (element.id?.includes('msRemAudio') || 
+            element.id?.includes('userAudio') ||
+            element.className?.includes('remote-audio') ||
+            element.dataset?.userId) {
+          
+          const userId = element.id || `audio-${Date.now()}-${Math.random()}`;
+          
+          // Try to capture if it has a stream
+          if (element.srcObject && !audioCaptures.has(userId)) {
             captureAudioElement(element);
             capturedCount++;
+          } else if (!element.srcObject) {
+            // Set up monitoring for when stream appears
+            console.log(`[VTF Inject] Audio element ${userId} has no stream yet, monitoring...`);
+            monitorAudioElement(element);
           }
-        });
-        
-        if (capturedCount > 0) {
-          console.log(`[VTF Inject] Captured ${capturedCount} audio elements`);
         }
-        
-        return existingElements.length;
-      };
-      
-      // Initial check
-      processExistingAudioElements();
-      
-      // Keep checking periodically in case elements appear later
-      const audioCheckInterval = setInterval(() => {
-        const count = processExistingAudioElements();
-        // Can stop checking once we have a reasonable number of elements
-        if (count > 0 && audioCaptures.size > 0) {
-          clearInterval(audioCheckInterval);
-          console.log('[VTF Inject] Stopping periodic audio element check');
-        }
-      }, 2000);
-      
-      // Phase 5: Mark as ready
-      state.phase = InitState.READY;
-      state.initialized = true;
-      
-      const initDuration = Date.now() - state.initStartTime;
-      console.log(`[VTF Inject] Initialization complete in ${initDuration}ms`);
-      
-      // Send success message
-      sendMessage('initialized', {
-        success: true,
-        phase: state.phase,
-        timestamp: Date.now(),
-        duration: initDuration,
-        captureErrors: captureErrors,
-        errors: state.errors,
-        details: state.details
-      }, 'high');
-      
-      // Flush any queued messages
-      flushMessageQueue();
-      
-    } catch (error) {
-      state.phase = InitState.FAILED;
-      state.errors.push({
-        type: 'initialization',
-        error: error.message,
-        phase: state.phase
       });
       
-      console.error('[VTF Inject] Initialization failed:', error);
+      return { total: allAudioElements.length, captured: capturedCount };
+    };
+    
+    // Monitor individual audio element for stream
+    const monitorAudioElement = (element) => {
+      const checkInterval = setInterval(() => {
+        if (element.srcObject) {
+          clearInterval(checkInterval);
+          captureAudioElement(element);
+        }
+      }, 100);
       
-      sendMessage('initializationFailed', {
-        phase: state.phase,
-        error: error.message,
-        errors: state.errors,
-        duration: Date.now() - state.initStartTime
-      }, 'high');
-    }
+      // Clean up after 30 seconds if no stream
+      setTimeout(() => clearInterval(checkInterval), 30000);
+    };
+    
+    // Set up DOM observer for NEW audio elements
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeName === 'AUDIO' || node.querySelector?.('audio')) {
+            console.log('[VTF Inject] New audio element detected');
+            processAudioElements();
+          }
+        });
+      });
+    });
+    
+    // Start observing immediately
+    const observerTarget = document.body || document.documentElement;
+    observer.observe(observerTarget, { 
+      childList: true, 
+      subtree: true,
+      attributes: false
+    });
+    
+    state.observerSetup = true;
+    console.log('[VTF Inject] DOM observer active, watching for audio elements');
+    
+    // Initial audio scan
+    const initialScan = processAudioElements();
+    console.log(`[VTF Inject] Initial scan complete: ${initialScan.captured} audio elements captured`);
+    
+    // Keep scanning periodically for dynamic elements
+    setInterval(() => {
+      const scan = processAudioElements();
+      if (scan.captured > 0) {
+        console.log(`[VTF Inject] Periodic scan: ${scan.captured} new captures`);
+      }
+    }, 3000);
+    
+    // Mark as ready - we're capturing audio!
+    state.phase = InitState.READY;
+    state.initialized = true;
+    state.details.observerTarget = observerTarget.tagName;
+    
+    sendMessage('initialized', {
+      success: true,
+      phase: state.phase,
+      timestamp: Date.now(),
+      duration: Date.now() - state.initStartTime,
+      audioElements: initialScan.total,
+      capturedElements: initialScan.captured,
+      globalsFound: false, // Not required!
+      details: state.details
+    }, 'high');
+    
+    // Phase 2: OPTIONAL - Try to find globals in the background
+    console.log('[VTF Inject] Starting OPTIONAL globals discovery in background...');
+    startBackgroundGlobalsDiscovery();
+    
+    // Flush any queued messages
+    flushMessageQueue();
   };
   
-  // Stubborn globals discovery - polls forever until found (no timeout)
-  const discoverGlobals = () => {
-    return new Promise((resolve) => {
-      let attempts = 0;
+  // Background task to find globals - NON-BLOCKING
+  const startBackgroundGlobalsDiscovery = () => {
+    let attempts = 0;
+    
+    const tryFindGlobals = () => {
+      attempts++;
       
-      const tryDiscover = () => {
-        attempts++;
+      if (vtfGlobals.find()) {
+        console.log(`[VTF Inject] BONUS: Found globals after ${attempts} attempts!`);
+        state.globalsFound = true;
+        state.details.audioVolume = vtfGlobals.globals?.audioVolume;
+        state.details.sessionState = vtfGlobals.globals?.sessData?.currentState;
         
-        if (vtfGlobals.find()) {
-          console.log(`[VTF Inject] Globals found after ${attempts} attempts!`);
-          sendMessage('globalsFound', { 
-            hasGlobals: true,
-            location: state.details.globalsLocation,
-            audioVolume: vtfGlobals.globals?.audioVolume,
-            sessionState: vtfGlobals.globals?.sessData?.currentState,
-            attempts: attempts
-          }, 'high');
-          resolve(true);
-        } else {
-          // Never give up - this is the key to making it work!
-          // Log progress every 20 attempts (10 seconds)
-          if (attempts % 20 === 0) {
-            console.log(`[VTF Inject] Still looking for globals... (attempt ${attempts})`);
-            sendMessage('initializationProgress', { 
-              phase: state.phase,
-              message: `Still looking for VTF globals... (${attempts * 0.5}s elapsed)`,
-              attempts: attempts
-            });
-          }
-          
-          // Keep trying forever
-          setTimeout(tryDiscover, 500);
-        }
-      };
+        // Apply hooks if we can
+        const hooks = hookVTFFunctions();
+        state.hooksApplied = hooks.length > 0;
+        
+        // Watch for replacement
+        watchGlobals();
+        
+        // Notify that we found globals
+        sendMessage('globalsFound', { 
+          hasGlobals: true,
+          location: state.details.globalsLocation,
+          audioVolume: vtfGlobals.globals?.audioVolume,
+          sessionState: vtfGlobals.globals?.sessData?.currentState,
+          attempts: attempts
+        }, 'high');
+        
+        return; // Stop searching
+      }
       
-      tryDiscover();
-    });
+      // Log periodically but don't spam
+      if (attempts % 20 === 0) {
+        console.log(`[VTF Inject] Still searching for globals (attempt ${attempts}) - extension works without them!`);
+      }
+      
+      // Keep trying forever, but slow down over time
+      const delay = Math.min(500 * Math.ceil(attempts / 10), 5000);
+      setTimeout(tryFindGlobals, delay);
+    };
+    
+    // Start after a small delay
+    setTimeout(tryFindGlobals, 1000);
   };
+  
+  // Removed old discoverGlobals - globals are now optional!
   
   // Listen for commands from content script
   window.addEventListener('message', (event) => {
