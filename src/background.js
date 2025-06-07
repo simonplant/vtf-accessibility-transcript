@@ -5,6 +5,7 @@ class VTFTranscriptionService {
     
     this.userBuffers = new Map();          
     this.activeTranscriptions = new Map(); 
+    this.transcriptionQueue = new Map();
     
     
     this.retryCount = new Map();           
@@ -46,6 +47,12 @@ class VTFTranscriptionService {
     
     
     this.keepAliveTimer = null;
+    
+    // Rate limiting
+    this.apiCallTimes = [];
+    this.maxCallsPerMinute = 50; // Whisper API limit
+    this.minTimeBetweenCalls = 1200; // 1.2 seconds minimum between calls
+    this.lastApiCallTime = 0;
   }
   
   
@@ -210,42 +217,51 @@ class VTFTranscriptionService {
   
   
   async transcribeUserBuffer(userId) {
-    
-    if (this.activeTranscriptions.has(userId)) {
-      
+    // Check if already queued or processing
+    if (this.activeTranscriptions.has(userId) || this.transcriptionQueue.has(userId)) {
+      console.log(`[Service Worker] Already processing/queued for ${userId}`);
       return;
     }
     
     const buffer = this.userBuffers.get(userId);
     if (!buffer || !buffer.hasData()) {
-      
       return;
     }
     
-    try {
+    // Extract audio data and queue it
+    const audioData = buffer.extractForTranscription();
+    if (!audioData || audioData.samples.length === 0) return;
+    
+    this.transcriptionQueue.set(userId, audioData);
+    
+    // Process queue
+    await this.processTranscriptionQueue();
+  }
+  
+  async processTranscriptionQueue() {
+    // Process one user at a time from the queue
+    for (const [userId, audioData] of this.transcriptionQueue) {
+      if (this.activeTranscriptions.has(userId)) continue;
       
-      const audioData = buffer.extractForTranscription();
-      if (!audioData || audioData.samples.length === 0) return;
+      this.transcriptionQueue.delete(userId);
       
-      
-      
-      const transcriptionPromise = this.performTranscription(userId, audioData);
-      this.activeTranscriptions.set(userId, transcriptionPromise);
-      
-      
-      await transcriptionPromise;
-      
-      
-      this.retryCount.delete(userId);
-      this.lastError.delete(userId);
-      
-    } catch (error) {
-      console.error(`[Service Worker] Transcription error for ${userId}:`, error);
-      this.handleTranscriptionError(userId, error);
-      
-    } finally {
-      this.activeTranscriptions.delete(userId);
-      this.broadcastBufferStatus();
+      try {
+        const transcriptionPromise = this.performTranscription(userId, audioData);
+        this.activeTranscriptions.set(userId, transcriptionPromise);
+        
+        await transcriptionPromise;
+        
+        this.retryCount.delete(userId);
+        this.lastError.delete(userId);
+        
+      } catch (error) {
+        console.error(`[Service Worker] Transcription error for ${userId}:`, error);
+        this.handleTranscriptionError(userId, error);
+        
+      } finally {
+        this.activeTranscriptions.delete(userId);
+        this.broadcastBufferStatus();
+      }
     }
   }
   
@@ -255,6 +271,8 @@ class VTFTranscriptionService {
       throw new Error('No API key configured');
     }
     
+    // Rate limiting check
+    await this.enforceRateLimit();
     
     const wavBlob = this.createWAV(audioData.samples, 16000);
     
@@ -309,6 +327,30 @@ class VTFTranscriptionService {
     }
   }
   
+  async enforceRateLimit() {
+    const now = Date.now();
+    
+    // Minimum time between calls
+    const timeSinceLastCall = now - this.lastApiCallTime;
+    if (timeSinceLastCall < this.minTimeBetweenCalls) {
+      const waitTime = this.minTimeBetweenCalls - timeSinceLastCall;
+      console.log(`[Service Worker] Rate limiting: waiting ${waitTime}ms`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    // Calls per minute limit
+    this.apiCallTimes = this.apiCallTimes.filter(t => now - t < 60000);
+    if (this.apiCallTimes.length >= this.maxCallsPerMinute) {
+      const oldestCall = this.apiCallTimes[0];
+      const waitTime = 60000 - (now - oldestCall) + 100; // +100ms buffer
+      console.log(`[Service Worker] Rate limit reached, waiting ${waitTime}ms`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastApiCallTime = Date.now();
+    this.apiCallTimes.push(this.lastApiCallTime);
+  }
+  
   
   createWAV(float32Array, sampleRate) {
     const length = float32Array.length;
@@ -351,7 +393,7 @@ class VTFTranscriptionService {
   int16ToFloat32(int16Array) {
     const float32Array = new Float32Array(int16Array.length);
     for (let i = 0; i < int16Array.length; i++) {
-      float32Array[i] = int16Array[i] / (int16Array[i] < 0 ? 0x8000 : 0x7FFF);
+      float32Array[i] = int16Array[i] / 32768.0;
     }
     return float32Array;
   }
@@ -574,10 +616,37 @@ class VTFTranscriptionService {
       throw new Error('API key is required');
     }
     
+    // Validate API key format (OpenAI keys start with 'sk-')
+    if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
+      throw new Error('Invalid API key format. OpenAI API keys should start with "sk-"');
+    }
+    
+    // Test the API key with a minimal request
+    try {
+      const testResponse = await fetch('https://api.openai.com/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`
+        }
+      });
+      
+      if (!testResponse.ok) {
+        if (testResponse.status === 401) {
+          throw new Error('Invalid API key - authentication failed');
+        }
+        throw new Error(`API key validation failed: ${testResponse.status}`);
+      }
+    } catch (error) {
+      if (error.message.includes('API key')) {
+        throw error;
+      }
+      // Network errors are okay - we'll handle them during actual use
+      console.warn('[Service Worker] Could not validate API key (network issue):', error);
+    }
+    
     this.apiKey = apiKey;
     await chrome.storage.local.set({ openaiApiKey: apiKey });
     
-    
+    console.log('[Service Worker] API key saved and validated');
     return { status: 'saved' };
   }
   
@@ -799,4 +868,5 @@ self.addEventListener('message', event => {
     vtfService.transcribeUserBuffer(userId);
   }
 });
+
 

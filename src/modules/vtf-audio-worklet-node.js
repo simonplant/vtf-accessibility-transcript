@@ -1,5 +1,3 @@
-
-
 export class VTFAudioWorkletNode {
     constructor(context, userId, options = {}) {
       
@@ -59,7 +57,8 @@ export class VTFAudioWorkletNode {
         
         
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-          workletUrl = chrome.runtime.getURL(`workers/${this.options.workletPath}`);
+          workletUrl = chrome.runtime.getURL('workers/audio-worklet.js');
+          console.log('[Audio Worklet] Loading from Chrome extension:', workletUrl);
         }
         
         

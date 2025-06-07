@@ -1,5 +1,3 @@
-
-
 class VTFPopup {
   constructor() {
     
@@ -128,7 +126,13 @@ class VTFPopup {
       
     } catch (error) {
       console.error('[VTF Popup] State check error:', error);
-      this.showExtensionState('Extension error. Try refreshing the page.', 'error');
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      console.error('[VTF Popup] Error details:', { 
+        message: errorMessage,
+        stack: error?.stack,
+        type: error?.name 
+      });
+      this.showExtensionState(`Extension error: ${errorMessage}`, 'error');
     }
   }
   
@@ -399,10 +403,24 @@ class VTFPopup {
         throw new Error('No active tab');
       }
       
+      // Check if we're on the correct domain
+      if (!tab.url?.includes('vtf.t3live.com')) {
+        throw new Error('Not on VTF page');
+      }
+      
       return new Promise((resolve, reject) => {
         chrome.tabs.sendMessage(tab.id, message, response => {
           if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError);
+            const error = chrome.runtime.lastError;
+            console.error('[VTF Popup] Chrome runtime error:', error);
+            
+            // Check if content script is not loaded
+            if (error.message?.includes('Could not establish connection') || 
+                error.message?.includes('Receiving end does not exist')) {
+              reject(new Error('Content script not loaded. Please refresh the VTF page.'));
+            } else {
+              reject(error);
+            }
           } else {
             resolve(response);
           }
@@ -410,7 +428,7 @@ class VTFPopup {
       });
     } catch (error) {
       console.error('[VTF Popup] Content script communication error:', error);
-      return null;
+      throw error; // Re-throw to be caught by caller
     }
   }
   

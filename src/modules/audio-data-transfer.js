@@ -464,7 +464,9 @@ export class AudioDataTransfer {
     
     destroy() {
       try {
-        // Clear all intervals FIRST
+        console.log('[Data Transfer] Starting destroy...');
+        
+        // Clear all intervals FIRST to prevent any new operations
         if (this.validityCheckInterval) {
           clearInterval(this.validityCheckInterval);
           this.validityCheckInterval = null;
@@ -473,16 +475,22 @@ export class AudioDataTransfer {
           clearInterval(this.cleanupInterval);
           this.cleanupInterval = null;
         }
-        // Then flush and clean up
-        this.flushAll();
+        
+        // Then flush pending data
+        const flushedCount = this.flushAll();
+        console.log(`[Data Transfer] Flushed ${flushedCount} user buffers`);
+        
+        // Finally clear all data structures
         this.pendingChunks.clear();
         this.userStats.clear();
         this.failedChunks = [];
-        console.log('[Data Transfer] Destroyed');
+        
+        console.log('[Data Transfer] Destroyed successfully');
       } catch (error) {
-        console.error('[Data Transfer] Error destroying instance:', error);
-        this.transferStats.errors++;
-        this.lastError = error;
+        console.error('[Data Transfer] Error during destroy:', error);
+        // Still try to clear intervals even if other operations fail
+        if (this.validityCheckInterval) clearInterval(this.validityCheckInterval);
+        if (this.cleanupInterval) clearInterval(this.cleanupInterval);
       }
     }
   }

@@ -116,17 +116,27 @@ export class VTFAudioCapture {
   async loadAudioWorklet() {
     try {
       if (!this.audioContext.audioWorklet) {
+        console.warn('[Audio Capture] AudioWorklet not supported');
         this.workletReady = false;
         return;
       }
+      
       let workletUrl = this.config.workletPath;
+      
+      // Proper Chrome extension URL handling
       if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-        workletUrl = chrome.runtime.getURL(`workers/${this.config.workletPath}`);
+        // Fix: Use correct path without 'workers/' prefix since it's already in web_accessible_resources
+        workletUrl = chrome.runtime.getURL('workers/audio-worklet.js');
+        console.log('[Audio Capture] Loading AudioWorklet from:', workletUrl);
       }
+      
       await this.audioContext.audioWorklet.addModule(workletUrl);
       this.workletReady = true;
+      console.log('[Audio Capture] AudioWorklet loaded successfully');
+      
     } catch (error) {
       console.warn('[Audio Capture] AudioWorklet failed, will use ScriptProcessor fallback:', error);
+      console.warn('[Audio Capture] Attempted URL:', workletUrl);
       this.workletReady = false;
     }
   }

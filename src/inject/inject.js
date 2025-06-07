@@ -173,9 +173,27 @@
     static instance = null;
     static getContext() {
       if (!this.instance) {
-        this.instance = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        try {
+          this.instance = new (window.AudioContext || window.webkitAudioContext)({ 
+            sampleRate: 16000,
+            latencyHint: 'interactive'
+          });
+          console.log('[VTF Inject] Created AudioContext with sampleRate:', this.instance.sampleRate);
+        } catch (error) {
+          console.error('[VTF Inject] Failed to create AudioContext:', error);
+          throw error;
+        }
       }
       return this.instance;
+    }
+    
+    static async ensureRunning() {
+      const ctx = this.getContext();
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+        console.log('[VTF Inject] AudioContext resumed');
+      }
+      return ctx;
     }
   }
   
@@ -296,7 +314,9 @@
       try {
         capture.source.disconnect();
         capture.processor.disconnect();
-        capture.audioContext.close();
+        // Don't close the shared AudioContext!
+        // capture.audioContext.close(); // REMOVED - This was closing the singleton
+        
         audioCaptures.delete(userId);
         
         const duration = Date.now() - capture.startTime;
@@ -305,6 +325,8 @@
           duration,
           chunks: capture.chunkCount 
         }, 'high');
+        
+        console.log(`[VTF Inject] Cleaned up capture for ${userId}`);
       } catch (error) {
         console.error(`[VTF Inject] Error cleaning up ${userId}:`, error);
       }
