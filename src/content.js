@@ -1,228 +1,310 @@
-// This runs in the CONTENT SCRIPT context (isolated from page)
-// It CANNOT access window.E_ or MediaStreams directly
-
-class VTFAudioExtension {
+// src/content.js - Enhanced bridge with state management
+class VTFExtensionBridge {
   constructor() {
-    this.isInitialized = false;
-    this.isCapturing = false;
-    this.hookReady = false;
-    this.activeUsers = new Set();
+    this.state = {
+      initialized: false,
+      globalsFound: false,
+      capturing: false,
+      ready: false,
+      lastError: null,
+      stats: {
+        messagesReceived: 0,
+        messagesSent: 0,
+        audioChunksRelayed: 0,
+        errors: 0
+      }
+    };
+    
+    this.messageQueue = [];
+    this.initPromise = null;
   }
   
   async init() {
-    console.log('[VTF Extension] Initializing...');
-    // Inject the VTF script first
-    this.injectVTFScript();
-    // Wait for globals to be found by the injected script
-    const globalsFound = await this.waitForGlobalsFromHook();
-    if (!globalsFound) {
-      throw new Error('VTF globals not found by injected script');
-    }
-    // Continue with initialization...
-    this.setupMessageHandlers();
-    this.setupChromeHandlers();
-    await this.waitForHookReady();
-    this.isInitialized = true;
-    console.log('[VTF Extension] Content script initialized');
+    if (this.initPromise) return this.initPromise;
+    
+    this.initPromise = this._init();
+    return this.initPromise;
   }
   
-  injectVTFScript() {
-    console.log('[VTF Extension] Injecting audio hook...');
+  async _init() {
+    console.log('[VTF Extension] Initializing bridge...');
     
-    // Inject our audio hook into the page
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('inject/inject.js');
-    script.onload = () => {
-      console.log('[VTF Extension] Audio hook script loaded');
-      script.remove();
-    };
-    script.onerror = (e) => {
-      console.error('[VTF Extension] Failed to load audio hook:', e);
-    };
-    
-    (document.head || document.documentElement).appendChild(script);
+    try {
+      // Set up handlers first
+      this.setupMessageHandlers();
+      this.setupChromeHandlers();
+      
+      // Then inject script
+      await this.injectScript();
+      
+      // Wait for initialization
+      await this.waitForInitialization();
+      
+      this.state.ready = true;
+      console.log('[VTF Extension] Bridge ready');
+      
+      // Notify popup/background
+      chrome.runtime.sendMessage({
+        type: 'extensionReady',
+        state: this.getState()
+      });
+      
+    } catch (error) {
+      this.state.lastError = error.message;
+      console.error('[VTF Extension] Initialization failed:', error);
+      throw error;
+    }
+  }
+  
+  injectScript() {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = chrome.runtime.getURL('inject/inject.js');
+      
+      script.onload = () => {
+        script.remove();
+        console.log('[VTF Extension] Inject script loaded');
+        resolve();
+      };
+      
+      script.onerror = () => {
+        reject(new Error('Failed to load inject script'));
+      };
+      
+      (document.head || document.documentElement).appendChild(script);
+    });
+  }
+  
+  waitForInitialization(timeout = 10000) {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+      
+      const checkInitialized = () => {
+        if (this.state.initialized) {
+          resolve();
+        } else if (Date.now() - startTime > timeout) {
+          reject(new Error('Initialization timeout'));
+        } else {
+          setTimeout(checkInitialized, 100);
+        }
+      };
+      
+      checkInitialized();
+    });
   }
   
   setupMessageHandlers() {
-    // Listen for messages from injected script
     window.addEventListener('message', (event) => {
-      // Only accept messages from our injected script
-      if (event.data.source !== 'vtf-audio-hook') return;
+      // Strict source checking
+      if (event.data.source !== 'vtf-inject') return;
       
-      console.log('[VTF Extension] Message from hook:', event.data.type);
+      this.state.stats.messagesReceived++;
       
-      switch (event.data.type) {
-        case 'hookReady':
-          this.hookReady = true;
-          break;
-          
-        case 'audioData':
-          // Forward audio data to background
-          this.sendToBackground({
-            type: 'audioChunk',
-            ...event.data.data
-          });
-          break;
-          
-        case 'captureStarted':
-          this.activeUsers.add(event.data.data.userId);
-          this.sendToBackground({
-            type: 'userJoined',
-            userId: event.data.data.userId
-          });
-          break;
-          
-        case 'captureStopped':
-          this.activeUsers.delete(event.data.data.userId);
-          this.sendToBackground({
-            type: 'userLeft',
-            userId: event.data.data.userId
-          });
-          break;
-          
-        case 'volumeChanged':
-          this.sendToBackground({
-            type: 'volumeChanged',
-            volume: event.data.data.volume
-          });
-          break;
-          
-        case 'status':
-          // Handle status responses
-          break;
-          
-        case 'captureError':
-          console.error('[VTF Extension] Capture error:', event.data.data);
-          break;
+      // Handle high-priority messages immediately
+      if (event.data.priority === 'high') {
+        console.log('[VTF Extension] High priority message:', event.data.type);
+      }
+      
+      try {
+        switch (event.data.type) {
+          case 'initialized':
+            this.state.initialized = true;
+            console.log('[VTF Extension] Inject script initialized');
+            break;
+            
+          case 'globalsFound':
+            this.state.globalsFound = event.data.data.hasGlobals;
+            console.log('[VTF Extension] Globals found:', event.data.data.hasGlobals);
+            
+            if (!event.data.data.hasGlobals && event.data.data.error) {
+              this.handleError('globalsDiscovery', event.data.data.error);
+            }
+            break;
+            
+          case 'audioData':
+            if (this.state.capturing) {
+              this.state.stats.audioChunksRelayed++;
+              
+              // Relay to background
+              this.sendToBackground({
+                type: 'audioChunk',
+                userId: event.data.data.userId,
+                chunk: event.data.data.samples,
+                timestamp: event.data.data.timestamp,
+                sampleRate: 16000
+              });
+            }
+            break;
+            
+          case 'captureStarted':
+            console.log('[VTF Extension] Capture started for', event.data.data.userId);
+            this.sendToBackground({
+              type: 'userJoined',
+              userId: event.data.data.userId,
+              timestamp: event.data.data.timestamp
+            });
+            break;
+            
+          case 'captureStopped':
+            console.log('[VTF Extension] Capture stopped for', event.data.data.userId);
+            this.sendToBackground({
+              type: 'userLeft',
+              userId: event.data.data.userId,
+              duration: event.data.data.duration,
+              chunks: event.data.data.chunks
+            });
+            break;
+            
+          case 'vtfFunction':
+            this.handleVTFFunction(event.data.data);
+            break;
+            
+          case 'error':
+            this.handleError(event.data.data.context, event.data.data.error);
+            break;
+            
+          case 'state':
+            // Response to getState command
+            this.handleStateResponse(event.data.data);
+            break;
+        }
+      } catch (error) {
+        console.error('[VTF Extension] Message handler error:', error);
+        this.state.stats.errors++;
       }
     });
   }
   
   setupChromeHandlers() {
-    // Listen for messages from popup/background
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      console.log('[VTF Extension] Chrome message:', request.type);
-      
-      switch (request.type) {
-        case 'startCapture':
-          this.startCapture();
-          sendResponse({ status: 'started' });
-          break;
-          
-        case 'stopCapture':
-          this.stopCapture();
-          sendResponse({ status: 'stopped' });
-          break;
-          
-        case 'getStatus':
-          sendResponse({
-            initialized: this.isInitialized,
-            capturing: this.isCapturing,
-            hookReady: this.hookReady,
-            activeUsers: Array.from(this.activeUsers)
-          });
-          break;
-          
-        case 'transcription':
-          // Display transcription in UI
-          this.displayTranscription(request.data);
-          break;
-      }
-      
-      return false; // Synchronous response
-    });
-  }
-  
-  async waitForHookReady() {
-    return new Promise((resolve) => {
-      if (this.hookReady) {
-        resolve();
-        return;
-      }
-      
-      const checkInterval = setInterval(() => {
-        if (this.hookReady) {
-          clearInterval(checkInterval);
-          resolve();
+      // Async handler
+      (async () => {
+        try {
+          switch (request.type) {
+            case 'startCapture':
+              this.state.capturing = true;
+              console.log('[VTF Extension] Starting capture');
+              sendResponse({ status: 'started' });
+              break;
+              
+            case 'stopCapture':
+              this.state.capturing = false;
+              this.sendToInject('stopAllCaptures');
+              console.log('[VTF Extension] Stopping capture');
+              sendResponse({ status: 'stopped' });
+              break;
+              
+            case 'getStatus':
+              // Request fresh state from inject
+              this.sendToInject('getState');
+              sendResponse(this.getState());
+              break;
+              
+            case 'refreshState':
+              this.sendToInject('refreshState');
+              sendResponse({ status: 'refreshing' });
+              break;
+              
+            default:
+              sendResponse({ error: 'Unknown command' });
+          }
+        } catch (error) {
+          console.error('[VTF Extension] Chrome handler error:', error);
+          sendResponse({ error: error.message });
         }
-      }, 100);
+      })();
       
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        console.error('[VTF Extension] Hook ready timeout');
-        resolve(); // Resolve anyway to not block
-      }, 10000);
+      return true; // Async response
     });
   }
   
-  startCapture() {
-    if (!this.hookReady) {
-      console.error('[VTF Extension] Cannot start capture - hook not ready');
-      return;
+  handleVTFFunction(data) {
+    switch (data.function) {
+      case 'reconnectAudio':
+        console.log('[VTF Extension] Reconnect audio triggered');
+        this.sendToBackground({ 
+          type: 'reconnectAudio',
+          timestamp: data.timestamp 
+        });
+        break;
+        
+      case 'adjustVol':
+        console.log('[VTF Extension] Volume changed:', data.volume);
+        this.sendToBackground({
+          type: 'volumeChanged',
+          volume: data.volume,
+          timestamp: data.timestamp
+        });
+        break;
+    }
+  }
+  
+  handleError(context, error) {
+    console.error(`[VTF Extension] Error in ${context}:`, error);
+    this.state.stats.errors++;
+    this.state.lastError = { context, error, timestamp: Date.now() };
+    
+    // Notify background
+    this.sendToBackground({
+      type: 'extensionError',
+      context,
+      error,
+      timestamp: Date.now()
+    });
+  }
+  
+  handleStateResponse(data) {
+    // Update our state with inject script state
+    if (data.globalsFound !== undefined) {
+      this.state.globalsFound = data.globalsFound;
     }
     
-    this.isCapturing = true;
-    
-    // Send command to injected script
-    window.postMessage({
-      source: 'vtf-extension-command',
-      type: 'startCapture'
-    }, '*');
-    
-    // Notify background
-    this.sendToBackground({ type: 'captureStarted' });
+    // Store for popup queries
+    this.lastInjectState = data;
   }
   
-  stopCapture() {
-    this.isCapturing = false;
-    
-    // Send command to injected script
+  sendToInject(command) {
     window.postMessage({
-      source: 'vtf-extension-command',
-      type: 'stopCapture'
+      source: 'vtf-content',
+      type: command,
+      timestamp: Date.now()
     }, '*');
-    
-    // Notify background
-    this.sendToBackground({ type: 'captureStopped' });
   }
   
   sendToBackground(message) {
-    chrome.runtime.sendMessage(message).catch((error) => {
-      console.error('[VTF Extension] Failed to send to background:', error);
+    this.state.stats.messagesSent++;
+    
+    chrome.runtime.sendMessage(message, response => {
+      if (chrome.runtime.lastError) {
+        console.error('[VTF Extension] Background message error:', 
+          chrome.runtime.lastError);
+        this.state.stats.errors++;
+      }
     });
   }
   
-  displayTranscription(transcription) {
-    // Simple UI display (implement as needed)
-    console.log('[VTF Extension] Transcription:', transcription);
-  }
-
-  waitForGlobalsFromHook() {
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        resolve(false);
-      }, 30000);
-      const messageHandler = (event) => {
-        if (event.data.source !== 'vtf-audio-hook') return;
-        if (event.data.type === 'globalsFound') {
-          console.log('[VTF Extension] Globals found by injected script!', event.data.data);
-          clearTimeout(timeout);
-          window.removeEventListener('message', messageHandler);
-          resolve(true);
-        } else if (event.data.type === 'globalsFailed') {
-          console.error('[VTF Extension] Injected script failed to find globals');
-          clearTimeout(timeout);
-          window.removeEventListener('message', messageHandler);
-          resolve(false);
-        }
-      };
-      window.addEventListener('message', messageHandler);
-    });
+  getState() {
+    return {
+      bridge: {
+        initialized: this.state.initialized,
+        globalsFound: this.state.globalsFound,
+        capturing: this.state.capturing,
+        ready: this.state.ready,
+        lastError: this.state.lastError,
+        stats: this.state.stats
+      },
+      inject: this.lastInjectState || {}
+    };
   }
 }
 
-// Initialize extension
-console.log('[VTF Extension] Content script loading');
-const vtfExtension = new VTFAudioExtension();
-vtfExtension.init();
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    window.vtfBridge = new VTFExtensionBridge();
+    window.vtfBridge.init().catch(console.error);
+  });
+} else {
+  window.vtfBridge = new VTFExtensionBridge();
+  window.vtfBridge.init().catch(console.error);
+}

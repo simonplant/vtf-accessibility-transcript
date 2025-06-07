@@ -131,6 +131,31 @@ async function copyAssets() {
     log.error(`Failed to copy workers: ${error.message}`);
     throw error;
   }
+
+  // Inject scripts
+  try {
+    await fs.mkdir(resolve('dist/inject'), { recursive: true });
+    const injectFiles = await fs.readdir(resolve('src/inject'));
+    let injectCount = 0;
+    for (const file of injectFiles) {
+      if (file.endsWith('.js')) {
+        await fs.copyFile(
+          resolve('src/inject', file),
+          resolve('dist/inject', file)
+        );
+        injectCount++;
+      }
+    }
+    if (injectCount > 0) {
+      log.success(`Copied ${injectCount} inject scripts`);
+    } else {
+      log.error('No inject scripts found!');
+      throw new Error('Missing inject scripts');
+    }
+  } catch (error) {
+    log.error(`Failed to copy inject scripts: ${error.message}`);
+    throw error;
+  }
 }
 
 async function bundleContentScript() {
