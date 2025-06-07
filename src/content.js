@@ -10,30 +10,28 @@ class VTFAudioExtension {
   }
   
   async init() {
-    console.log('[VTF Extension] Initializing content script');
-    
-    // Step 1: Inject the audio hook script into the page
-    this.injectAudioHook();
-    
-    // Step 2: Set up message handlers
+    console.log('[VTF Extension] Initializing...');
+    // Inject the VTF script first
+    this.injectVTFScript();
+    // Wait for globals to be found by the injected script
+    const globalsFound = await this.waitForGlobalsFromHook();
+    if (!globalsFound) {
+      throw new Error('VTF globals not found by injected script');
+    }
+    // Continue with initialization...
     this.setupMessageHandlers();
-    
-    // Step 3: Set up Chrome runtime handlers
     this.setupChromeHandlers();
-    
-    // Step 4: Wait for hook to be ready
     await this.waitForHookReady();
-    
     this.isInitialized = true;
     console.log('[VTF Extension] Content script initialized');
   }
   
-  injectAudioHook() {
+  injectVTFScript() {
     console.log('[VTF Extension] Injecting audio hook...');
     
     // Inject our audio hook into the page
     const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('inject/audio-hook.js');
+    script.src = chrome.runtime.getURL('inject/inject.js');
     script.onload = () => {
       console.log('[VTF Extension] Audio hook script loaded');
       script.remove();
@@ -198,6 +196,29 @@ class VTFAudioExtension {
   displayTranscription(transcription) {
     // Simple UI display (implement as needed)
     console.log('[VTF Extension] Transcription:', transcription);
+  }
+
+  waitForGlobalsFromHook() {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve(false);
+      }, 30000);
+      const messageHandler = (event) => {
+        if (event.data.source !== 'vtf-audio-hook') return;
+        if (event.data.type === 'globalsFound') {
+          console.log('[VTF Extension] Globals found by injected script!', event.data.data);
+          clearTimeout(timeout);
+          window.removeEventListener('message', messageHandler);
+          resolve(true);
+        } else if (event.data.type === 'globalsFailed') {
+          console.error('[VTF Extension] Injected script failed to find globals');
+          clearTimeout(timeout);
+          window.removeEventListener('message', messageHandler);
+          resolve(false);
+        }
+      };
+      window.addEventListener('message', messageHandler);
+    });
   }
 }
 

@@ -46,7 +46,7 @@
     "options_page": "options.html",
     
     "web_accessible_resources": [{
-      "resources": ["inject/audio-hook.js"],
+      "resources": ["inject/inject.js"],
       "matches": ["*://vtf.t3live.com/*"]
     }]
   }

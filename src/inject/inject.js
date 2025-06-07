@@ -1,4 +1,5 @@
-// This script runs in the PAGE context, not the extension context
+// inject.js - Runs in PAGE context
+// Handles all VTF page context logic: finding globals, hooking functions, monitoring DOM, capturing audio, and sending data to the extension
 // It has full access to VTF's JavaScript objects and MediaStreams
 
 (function() {
@@ -20,30 +21,70 @@
   
   // Step 1: Find or wait for VTF globals
   function findVTFGlobals() {
-    // Direct check for E_ (from console observation)
+    console.log('[VTF Audio Hook] Starting globals search in PAGE context');
+    // Try direct access first
     if (window.E_) {
       console.log('[VTF Audio Hook] Found globals at window.E_');
+      sendMessage('globalsFound', { path: 'window.E_', globals: extractGlobalsInfo(window.E_) });
       return window.E_;
     }
-    
-    // Fallback: Set up getter to catch when E_ is defined
-    if (!window._vtfGlobalsHooked) {
-      window._vtfGlobalsHooked = true;
-      let _E_ = window.E_;
-      
-      Object.defineProperty(window, 'E_', {
-        get() { return _E_; },
-        set(value) {
-          console.log('[VTF Audio Hook] Globals detected via setter');
-          _E_ = value;
-          initializeVTFHooks(value);
-        },
-        configurable: true
-      });
+    // Try Angular context approach (this WILL work in page context)
+    const checkElements = [
+      { id: 'webcam', indices: [8, 9, 10, 11, 12] },
+      { id: 'topRoomDiv', indices: [8, 9, 10, 11, 12] }
+    ];
+    for (const { id, indices } of checkElements) {
+      const element = document.getElementById(id);
+      if (element && element.__ngContext__) {
+        for (const index of indices) {
+          try {
+            const context = element.__ngContext__[index];
+            if (context?.appService?.globals) {
+              console.log(`[VTF Audio Hook] Found globals via ${id}.__ngContext__[${index}]`);
+              const globals = context.appService.globals;
+              sendMessage('globalsFound', { 
+                path: `${id}.__ngContext__[${index}].appService.globals`,
+                globals: extractGlobalsInfo(globals)
+              });
+              return globals;
+            }
+          } catch (e) {
+            // Continue searching
+          }
+        }
+      }
     }
-    
     return null;
   }
+  
+  function extractGlobalsInfo(globals) {
+    return {
+      audioVolume: globals.audioVolume,
+      sessionState: globals.sessData?.currentState,
+      hasGlobals: true
+    };
+  }
+  
+  function waitForGlobals() {
+    let attempts = 0;
+    const maxAttempts = 60;
+    const interval = setInterval(() => {
+      attempts++;
+      console.log(`[VTF Audio Hook] Globals search attempt ${attempts}/${maxAttempts}`);
+      const globals = findVTFGlobals();
+      if (globals) {
+        clearInterval(interval);
+        initializeVTFHooks(globals);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        console.error('[VTF Audio Hook] Globals not found after timeout');
+        sendMessage('globalsFailed', { attempts });
+      }
+    }, 500);
+  }
+  
+  // Start the search immediately
+  waitForGlobals();
   
   // Step 2: Hook into VTF's audio system
   function initializeVTFHooks(globals) {
@@ -317,21 +358,5 @@
         break;
     }
   });
-  
-  // Initialize
-  console.log('[VTF Audio Hook] Starting initialization');
-  const globals = findVTFGlobals();
-  if (globals) {
-    initializeVTFHooks(globals);
-  } else {
-    console.log('[VTF Audio Hook] Globals not found, waiting...');
-    // The property setter will catch it when defined
-  }
-  
-  // Scan for existing elements
-  setTimeout(scanForAudioElements, 1000);
-  
-  // Notify extension that hook is ready
-  sendMessage('hookReady', { version: '1.0' });
   
 })(); 
