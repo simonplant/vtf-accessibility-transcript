@@ -80,17 +80,23 @@ _Last updated: clean-refactor-initial commit_
    git clone https://github.com/simonplant/vtf-audio-extension.git
    cd vtf-audio-extension
    ```
-2. **Run the all-in-one setup/build:**
+2. **Install dependencies:**
    ```bash
-   npm run all
-   # This checks your environment, cleans, installs, builds, and tests everything
+   npm install
    ```
-3. **Load in Chrome:**
+3. **Build the extension:**
+   ```bash
+   npm run build
+   # OR
+   make build
+   # Both commands clean, copy static assets, and bundle scripts into dist/
+   ```
+4. **Load in Chrome:**
    - Open Chrome and go to `chrome://extensions/`
    - Enable "Developer mode"
    - Click "Load unpacked" and select the `dist` directory
 
-4. **Configure API Key:**
+5. **Configure API Key:**
    - Click the extension icon in Chrome toolbar
    - Click the settings (⚙️) button
    - Enter your OpenAI API key
@@ -100,80 +106,51 @@ _Last updated: clean-refactor-initial commit_
 
 ## 🛠️ Development Workflow
 
-- **Start dev mode (auto-rebuild):**
-  ```bash
-  npm run dev
-  # Watches for changes and auto-rebuilds
-  ```
-- **Build for production:**
+- **Build for development or production:**
   ```bash
   npm run build
-  # Or: npm run build -- --open  # (macOS: auto-opens chrome://extensions/)
+  # OR
+  make build
+  # Rebuilds everything into dist/
   ```
-- **Clean all build artifacts and zips:**
+- **Clean all build artifacts:**
   ```bash
   npm run clean
+  # OR
+  make clean
   ```
-- **Run tests:**
+- **One-liner for everything:**
   ```bash
-  npm run test
-  ```
-- **Check dependencies and security:**
-  ```bash
-  npm run check
-  ```
-- **Lint (optional):**
-  ```bash
-  npm run lint
-  # Only runs if ESLint is configured
+  npm start
+  # OR
+  make start
+  # Both commands run the full build
   ```
 
 ---
 
-## 🏗️ Build System Overview
-
-- **Automated:** One command (`npm run all`) sets up, builds, and tests everything.
-- **Transparent:** Every step prints a clear, color-coded summary and next steps.
-- **Clean:** No enterprise bloat, no unnecessary dependencies, no legacy scripts.
-- **Standard Output:** Bundles to `dist/content.js` (referenced in `manifest.json`).
-- **Packaging:** `npm run package` creates a zip for Chrome Web Store/manual install.
-- **Dev Mode:** `npm run dev` watches for changes and rebuilds instantly.
-- **Dependency & Security Checks:** `npm run check` audits and checks for outdated packages.
-- **Clean Command:** `npm run clean` removes all build artifacts and zips.
-
----
-
-## 🧩 Project Structure
+## 🏗️ Project Structure
 
 ```
 vtf-audio-extension/
 ├── README.md              # Documentation
 ├── package.json           # Build configuration
+├── Makefile               # Makefile for build/clean/start
 ├── dist/                  # Built extension (git-ignored)
 │   ├── manifest.json
 │   ├── content.js         # Bundled content script
 │   ├── background.js
-│   ├── popup.html/js
-│   ├── options.html/js
-│   ├── style.css
 │   ├── icons/
+│   ├── inject/
 │   └── workers/
 ├── src/                   # Source code
 │   ├── content.js         # Main content script
 │   ├── background.js      # Service worker
 │   ├── manifest.json      # Extension manifest v3
-│   ├── popup.html/js      # Extension popup UI
-│   ├── options.html/js    # Settings page
-│   ├── style.css          # Unified styles
-│   ├── modules/           # Core modules (bundled during build)
-│   ├── workers/
-│   └── icons/
-├── scripts/               # Build system
-│   ├── build.js           # Main build script
-│   ├── dev.js             # Development watcher
-│   ├── clean.js           # Clean artifacts/zips
-│   ├── check-env.js       # Environment & dependency check
-│   └── shared.js          # Shared utilities
+│   ├── inject/            # Injected page scripts
+│   ├── workers/           # Audio worklet, etc.
+│   ├── icons/             # Extension icons
+│   └── ...
 └── test/                  # Test files
 ```
 
@@ -184,12 +161,12 @@ vtf-audio-extension/
 - **Extension not loading:**
   - Make sure you selected the `dist` folder, not `src`.
   - Check Chrome DevTools console for errors.
-  - Try: `npm run clean && npm run build`
+  - Try: `npm run clean && npm run build` or `make clean && make build`
 - **Build errors:**
   - Check the build summary for missing files or warnings.
-  - Run `npm run check` to see if dependencies are outdated or vulnerable.
+  - Run `npm install` to ensure dependencies are installed.
 - **Changes not showing:**
-  - Make sure `npm run dev` is running.
+  - Re-run `npm run build` or `make build` after making changes.
   - Refresh the extension in Chrome.
   - Hard refresh the VTF page (Cmd+Shift+R).
 - **API Key issues:**
@@ -239,16 +216,16 @@ If a release is available, download the `.zip` file from the [Releases](https://
    npm install
    ```
 
-2. **Start development mode:**
+2. **Build the extension:**
    ```bash
-   npm run dev
-   # Watches for changes and auto-rebuilds
+   npm run build
+   # OR
+   make build
    ```
 
 3. **Load the extension:**
    - In Chrome, load the `dist` directory
-   - The extension auto-rebuilds on file changes
-   - Just reload the extension in Chrome after changes
+   - The extension is ready to use after each build
 
 ## 🎮 Usage
 
